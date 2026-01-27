@@ -13,13 +13,16 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { fetchPackages } from '../services/packages';
+import { getPackages } from "../services/packages";
 import { uploadVouchersCsv } from '../services/vouchers';
 
 function extractBackendError(err) {
   const data = err?.response?.data;
   const code = data?.error?.code ?? 'REQUEST_FAILED';
-  const message = data?.error?.message ?? err?.message ?? 'Request failed';
+  const message =
+    data?.error?.message ??
+    err?.message ??
+    (err?.code ? `Request failed (${err.code})` : 'Request failed');
   return { code, message };
 }
 
@@ -36,28 +39,32 @@ export default function AdminVoucherUpload() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
+  let cancelled = false;
 
-    async function load() {
-      setPackagesLoading(true);
-      setPackagesError(null);
-      try {
-        const data = await fetchPackages();
-        if (cancelled) return;
-        setPackages(Array.isArray(data?.packages) ? data.packages : []);
-      } catch (err) {
-        if (cancelled) return;
-        setPackagesError(extractBackendError(err));
-      } finally {
-        if (!cancelled) setPackagesLoading(false);
-      }
+  async function load() {
+    setPackagesLoading(true);
+    setPackagesError(null);
+    try {
+      const res = await getPackages();
+      const data = res.data;
+      console.debug('[AdminVoucherUpload] packages data', data);
+      if (cancelled) return;
+      setPackages(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.debug('[AdminVoucherUpload] packages error', err);
+      if (cancelled) return;
+      setPackagesError(extractBackendError(err));
+    } finally {
+      if (!cancelled) setPackagesLoading(false);
     }
+  }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  load();
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   const canUpload = useMemo(() => {
     return Boolean(selectedPackageId) && Boolean(file) && !uploading;
@@ -136,7 +143,8 @@ export default function AdminVoucherUpload() {
             >
               {packages.map((p) => (
                 <MenuItem key={p.id} value={String(p.id)}>
-                  {p.name} ({p.duration_minutes} mins)
+                  {p.name}
+                  {typeof p.duration_minutes === 'number' ? ` (${p.duration_minutes} mins)` : ''}
                 </MenuItem>
               ))}
             </Select>
