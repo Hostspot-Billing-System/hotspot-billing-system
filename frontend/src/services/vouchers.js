@@ -5,7 +5,7 @@ export async function uploadVouchersCsv({ packageId, file }) {
   formData.append('file', file);
   formData.append('package_id', String(packageId));
 
-  const response = await api.post('/vouchers/upload', formData, {
+  const response = await api.post('/api/vouchers/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 

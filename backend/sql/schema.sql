@@ -27,9 +27,14 @@ CREATE TABLE IF NOT EXISTS voucher_batches (
   id          BIGSERIAL PRIMARY KEY,
   filename    TEXT NOT NULL,
   package_id  BIGINT NOT NULL REFERENCES packages(id) ON DELETE RESTRICT,
+  label       TEXT NULL,
   uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Backward-safe migration for existing DBs
+ALTER TABLE IF EXISTS voucher_batches
+  ADD COLUMN IF NOT EXISTS label TEXT NULL;
 
 CREATE TABLE IF NOT EXISTS vouchers (
   id         BIGSERIAL PRIMARY KEY,
