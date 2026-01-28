@@ -146,7 +146,7 @@ export class VoucherUploadService {
       // Create batch record
       const batchResult = await client.query(
         `
-        INSERT INTO voucher_batches (filename, package_id, label)
+        INSERT INTO voucher_batches (filename, package_id, description)
         VALUES ($1, $2, $3)
         RETURNING id
         `,

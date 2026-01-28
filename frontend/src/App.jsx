@@ -1,5 +1,64 @@
-import AdminVoucherUpload from "./pages/AdminVoucherUpload";
+import { useEffect, useMemo, useState } from 'react';
+import AdminLayout from './components/layout/AdminLayout';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminVoucherUpload from './pages/AdminVoucherUpload';
+import BatchHistory from './pages/BatchHistory';
+import Vouchers from './pages/Vouchers';
+
+function getPath() {
+  if (typeof window === 'undefined') return '/';
+  return window.location?.pathname ?? '/';
+}
+
+function navigateTo(path) {
+  if (typeof window === 'undefined') return;
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
 
 export default function App() {
-  return <AdminVoucherUpload />;
+  const [path, setPath] = useState(getPath());
+
+  useEffect(() => {
+    function onPop() {
+      setPath(getPath());
+    }
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const sidebarItems = useMemo(
+    () => [
+      { key: 'dashboard', label: 'Dashboard', path: '/admin' },
+      { key: 'upload', label: 'Voucher Upload', path: '/admin/voucher-upload' },
+      { key: 'batches', label: 'Batch History', path: '/admin/batches' },
+      { key: 'vouchers', label: 'Vouchers', path: '/admin/vouchers' },
+    ],
+    []
+  );
+
+  const content = useMemo(() => {
+    if (path === '/admin' || path === '/admin/dashboard') return <AdminDashboard />;
+    if (path === '/admin/voucher-upload') return <AdminVoucherUpload />;
+    if (path === '/admin/batches') return <BatchHistory />;
+    if (path === '/admin/vouchers') return <Vouchers />;
+
+    // Default to admin dashboard for unknown paths
+    if (path?.startsWith('/admin')) return <AdminDashboard />;
+
+    // Keep current behavior if someone visits '/' directly
+    return <AdminVoucherUpload />;
+  }, [path]);
+
+  return (
+    <AdminLayout
+      items={sidebarItems}
+      activePath={path}
+      onNavigate={(item) => {
+        if (item?.path) navigateTo(item.path);
+      }}
+    >
+      {content}
+    </AdminLayout>
+  );
 }
