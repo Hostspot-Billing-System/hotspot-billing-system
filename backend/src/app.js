@@ -6,6 +6,7 @@ import vouchersRoutes from "./routes/vouchersRoutes.js";
 import packagesRoutes from "./routes/packagesRoutes.js";
 import voucherBatchesRoutes from "./routes/voucherBatchesRoutes.js";
 import transactionsRoutes from "./routes/transactionsRoutes.js";
+import withdrawalsRoutes from "./routes/withdrawalsRoutes.js";
 
 const app = express();
 
@@ -38,5 +39,6 @@ app.use("/api/vouchers", vouchersRoutes);
 app.use("/api/packages", packagesRoutes);
 app.use("/api/voucher-batches", voucherBatchesRoutes);
 app.use("/api/transactions", transactionsRoutes);
+app.use("/api/withdrawals", withdrawalsRoutes);
 
 export default app;
