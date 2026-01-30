@@ -20,6 +20,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
 
 import { getPackages } from '../services/packages';
 import { exportTransactionsCSV, fetchTransactions } from '../api/transactions';
@@ -113,8 +116,8 @@ export default function AdminTransactions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [status, setStatus] = useState('');
   const [bundle, setBundle] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState(null);
+  const [toDate, setToDate] = useState(null);
   const [minAmount, setMinAmount] = useState('0');
   const [maxAmount, setMaxAmount] = useState('');
   const [perPage, setPerPage] = useState(20);
@@ -132,6 +135,9 @@ export default function AdminTransactions() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+
+  const fromDateQuery = fromDate ? dayjs(fromDate).startOf('day').toISOString() : undefined;
+  const toDateQuery = toDate ? dayjs(toDate).endOf('day').toISOString() : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -167,8 +173,8 @@ export default function AdminTransactions() {
         const params = {
           status: status ? String(status).toLowerCase() : undefined,
           bundle: bundle || undefined,
-          fromDate: fromDate || undefined,
-          toDate: toDate || undefined,
+          fromDate: fromDateQuery,
+          toDate: toDateQuery,
           search: searchQuery.trim() || undefined,
           page,
           perPage,
@@ -199,7 +205,7 @@ export default function AdminTransactions() {
     return () => {
       cancelled = true;
     };
-  }, [bundle, fromDate, maxAmount, minAmount, page, perPage, reloadKey, searchQuery, status, toDate]);
+  }, [bundle, fromDateQuery, maxAmount, minAmount, page, perPage, reloadKey, searchQuery, status, toDateQuery]);
 
   const visible = useMemo(() => {
     return rows
@@ -260,8 +266,8 @@ export default function AdminTransactions() {
               setSearchQuery('');
               setStatus('');
               setBundle('');
-              setFromDate('');
-              setToDate('');
+              setFromDate(null);
+              setToDate(null);
               setMinAmount('0');
               setMaxAmount('');
               setPerPage(20);
@@ -361,41 +367,37 @@ export default function AdminTransactions() {
               alignItems: 'end',
             }}
           >
-            <TextField
-              size="small"
-              label="From Date"
-              placeholder="mm/dd/yyyy"
-              value={fromDate}
-              onChange={(e) => {
-                setFromDate(e.target.value);
-                setPage(1);
-              }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Icon path={ICONS.calendar} size={16} color="#64748b" />
-                  </InputAdornment>
-                ),
-              }}
-            />
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DatePicker
+                label="From Date"
+                value={fromDate}
+                onChange={(v) => {
+                  setFromDate(v ?? null);
+                  setPage(1);
+                }}
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    placeholder: 'mm/dd/yyyy',
+                  },
+                }}
+              />
 
-            <TextField
-              size="small"
-              label="To Date"
-              placeholder="mm/dd/yyyy"
-              value={toDate}
-              onChange={(e) => {
-                setToDate(e.target.value);
-                setPage(1);
-              }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Icon path={ICONS.calendar} size={16} color="#64748b" />
-                  </InputAdornment>
-                ),
-              }}
-            />
+              <DatePicker
+                label="To Date"
+                value={toDate}
+                onChange={(v) => {
+                  setToDate(v ?? null);
+                  setPage(1);
+                }}
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    placeholder: 'mm/dd/yyyy',
+                  },
+                }}
+              />
+            </LocalizationProvider>
 
             <TextField
               size="small"
@@ -471,8 +473,8 @@ export default function AdminTransactions() {
                   const params = {
                     status: status ? String(status).toLowerCase() : undefined,
                     bundle: bundle || undefined,
-                    fromDate: fromDate || undefined,
-                    toDate: toDate || undefined,
+                    fromDate: fromDateQuery,
+                    toDate: toDateQuery,
                     search: searchQuery.trim() || undefined,
                     minAmount: minAmount || undefined,
                     maxAmount: maxAmount || undefined,
