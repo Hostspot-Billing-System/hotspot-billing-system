@@ -57,6 +57,57 @@ function isExpiredRow(voucherRow) {
   return new Date(voucherRow.expires_at).getTime() <= Date.now();
 }
 
+function buildTransactionsFilters({ status, bundle_id, date_from, date_to, search } = {}) {
+  const normalizedStatus = normalizeText(status);
+  if (normalizedStatus && normalizedStatus !== 'completed' && normalizedStatus !== 'failed') {
+    throw new DomainError('BAD_REQUEST', `Invalid status: ${status}`, 400);
+  }
+
+  const conditions = [];
+  const params = [];
+
+  if (normalizedStatus) {
+    params.push(normalizedStatus);
+    conditions.push(`t.status = $${params.length}`);
+  }
+
+  if (bundle_id != null && String(bundle_id).trim() !== '') {
+    const bundleId = parseRequiredPositiveBigint(bundle_id, 'bundle_id');
+    params.push(bundleId);
+    conditions.push(`t.bundle_id = $${params.length}`);
+  }
+
+  const fromRaw = normalizeText(date_from);
+  if (fromRaw) {
+    const from = new Date(fromRaw);
+    if (Number.isNaN(from.getTime())) {
+      throw new DomainError('BAD_REQUEST', 'date_from must be a valid date', 400);
+    }
+    params.push(from.toISOString());
+    conditions.push(`t.created_at >= $${params.length}::timestamptz`);
+  }
+
+  const toRaw = normalizeText(date_to);
+  if (toRaw) {
+    const to = new Date(toRaw);
+    if (Number.isNaN(to.getTime())) {
+      throw new DomainError('BAD_REQUEST', 'date_to must be a valid date', 400);
+    }
+    params.push(to.toISOString());
+    conditions.push(`t.created_at <= $${params.length}::timestamptz`);
+  }
+
+  const q = normalizeText(search);
+  if (q) {
+    params.push(`%${q}%`);
+    const idx = params.length;
+    conditions.push(`(t.reference ILIKE $${idx} OR t.customer_phone ILIKE $${idx})`);
+  }
+
+  const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { whereSql, params };
+}
+
 export class TransactionService {
   static async createTransaction({ voucher_code, bundle_id, customer_phone, amount_ugx, payment_method }) {
     const voucherCode = normalizeText(voucher_code);
@@ -198,57 +249,11 @@ export class TransactionService {
     page = 1,
     limit = 20,
   } = {}) {
-    const normalizedStatus = normalizeText(status);
-    if (normalizedStatus && normalizedStatus !== 'completed' && normalizedStatus !== 'failed') {
-      throw new DomainError('BAD_REQUEST', `Invalid status: ${status}`, 400);
-    }
-
-    const conditions = [];
-    const params = [];
-
-    if (normalizedStatus) {
-      params.push(normalizedStatus);
-      conditions.push(`t.status = $${params.length}`);
-    }
-
-    if (bundle_id != null && String(bundle_id).trim() !== '') {
-      const bundleId = parseRequiredPositiveBigint(bundle_id, 'bundle_id');
-      params.push(bundleId);
-      conditions.push(`t.bundle_id = $${params.length}`);
-    }
-
-    const fromRaw = normalizeText(date_from);
-    if (fromRaw) {
-      const from = new Date(fromRaw);
-      if (Number.isNaN(from.getTime())) {
-        throw new DomainError('BAD_REQUEST', 'date_from must be a valid date', 400);
-      }
-      params.push(from.toISOString());
-      conditions.push(`t.created_at >= $${params.length}::timestamptz`);
-    }
-
-    const toRaw = normalizeText(date_to);
-    if (toRaw) {
-      const to = new Date(toRaw);
-      if (Number.isNaN(to.getTime())) {
-        throw new DomainError('BAD_REQUEST', 'date_to must be a valid date', 400);
-      }
-      params.push(to.toISOString());
-      conditions.push(`t.created_at <= $${params.length}::timestamptz`);
-    }
-
-    const q = normalizeText(search);
-    if (q) {
-      params.push(`%${q}%`);
-      const idx = params.length;
-      conditions.push(`(t.reference ILIKE $${idx} OR t.customer_phone ILIKE $${idx})`);
-    }
-
     const safePage = Math.max(1, Math.floor(Number(page) || 1));
     const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
     const offset = (safePage - 1) * safeLimit;
 
-    const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { whereSql, params } = buildTransactionsFilters({ status, bundle_id, date_from, date_to, search });
 
     const countRes = await pool.query(
       `
@@ -294,6 +299,30 @@ export class TransactionService {
       total_pages: total ? Math.ceil(total / safeLimit) : 0,
       data: rowsRes.rows,
     };
+  }
+
+  static async listTransactionsExport({ status, bundle_id, date_from, date_to, search } = {}) {
+    const { whereSql, params } = buildTransactionsFilters({ status, bundle_id, date_from, date_to, search });
+
+    const result = await pool.query(
+      `
+      SELECT
+        t.reference,
+        t.customer_phone AS phone,
+        p.name AS bundle,
+        t.amount_ugx AS amount,
+        t.commission_ugx AS commission,
+        t.status,
+        t.created_at
+      FROM transactions t
+      JOIN packages p ON p.id = t.bundle_id
+      ${whereSql}
+      ORDER BY t.created_at DESC, t.id DESC
+      `,
+      params
+    );
+
+    return result.rows;
   }
 }
 

@@ -1,7 +1,10 @@
 import { Router } from 'express';
-import { createTransaction, listTransactions } from '../controllers/transactionsController.js';
+import { createTransaction, exportTransactions, listTransactions } from '../controllers/transactionsController.js';
 
 const router = Router();
+
+// GET /api/transactions/export?status=&bundle_id=&date_from=&date_to=&search=
+router.get('/export', exportTransactions);
 
 // POST /api/transactions
 router.post('/', createTransaction);

@@ -146,3 +146,82 @@ export async function listTransactions(req, res) {
     return res.status(httpStatus).json(body);
   }
 }
+
+function csvEscape(value) {
+  if (value == null) return '';
+  const str = String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replaceAll('"', '""')}"`;
+  }
+  return str;
+}
+
+export async function exportTransactions(req, res) {
+  try {
+    console.info('GET /api/transactions/export');
+
+    const status = normalizeText(req.query?.status);
+    const bundle_id = normalizeText(req.query?.bundle_id ?? req.query?.bundleId);
+
+    const date_from =
+      normalizeText(req.query?.date_from) ??
+      normalizeText(req.query?.from) ??
+      normalizeText(req.query?.start_date) ??
+      normalizeText(req.query?.start);
+
+    const date_to =
+      normalizeText(req.query?.date_to) ??
+      normalizeText(req.query?.to) ??
+      normalizeText(req.query?.end_date) ??
+      normalizeText(req.query?.end);
+
+    const search = normalizeText(req.query?.search ?? req.query?.q);
+
+    const rows = await TransactionService.listTransactionsExport({
+      status,
+      bundle_id,
+      date_from,
+      date_to,
+      search,
+    });
+
+    const header = ['reference', 'phone', 'bundle', 'amount', 'commission', 'status', 'created_at'];
+    const lines = [header.join(',')];
+
+    for (const row of rows) {
+      lines.push(
+        [
+          csvEscape(row.reference),
+          csvEscape(row.phone),
+          csvEscape(row.bundle),
+          csvEscape(row.amount),
+          csvEscape(row.commission),
+          csvEscape(row.status),
+          csvEscape(row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at),
+        ].join(',')
+      );
+    }
+
+    const csv = `${lines.join('\n')}\n`;
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = `transactions_export_${dateStamp}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    return res.status(200).send(csv);
+  } catch (err) {
+    if (err?.code === '42P01') {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'SCHEMA_MISSING',
+          message: "Database schema is missing (table 'transactions' not found). Apply the transactions migration, then retry.",
+        },
+      });
+    }
+
+    const { httpStatus, body } = toHttpError(err);
+    return res.status(httpStatus).json(body);
+  }
+}
