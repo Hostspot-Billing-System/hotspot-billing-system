@@ -109,6 +109,38 @@ function buildTransactionsFilters({ status, bundle_id, date_from, date_to, searc
 }
 
 export class TransactionService {
+  static async getTransactionById(id) {
+    const txId = parseRequiredPositiveBigint(id, 'id');
+
+    const result = await pool.query(
+      `
+      SELECT
+        t.id,
+        t.reference,
+        t.voucher_code,
+        t.bundle_id,
+        p.name AS bundle_name,
+        t.customer_phone,
+        t.amount_ugx,
+        t.commission_ugx,
+        t.status,
+        t.payment_method,
+        t.created_at
+      FROM transactions t
+      JOIN packages p ON p.id = t.bundle_id
+      WHERE t.id = $1
+      `,
+      [txId]
+    );
+
+    const row = result.rows[0] ?? null;
+    if (!row) {
+      throw new DomainError('TRANSACTION_NOT_FOUND', 'Transaction not found', 404);
+    }
+
+    return row;
+  }
+
   static async createTransaction({ voucher_code, bundle_id, customer_phone, amount_ugx, payment_method }) {
     const voucherCode = normalizeText(voucher_code);
     const bundleId = parseRequiredPositiveBigint(bundle_id, 'bundle_id');

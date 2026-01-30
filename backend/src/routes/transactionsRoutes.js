@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createTransaction, exportTransactions, listTransactions } from '../controllers/transactionsController.js';
+import { createTransaction, exportTransactions, getTransactionById, listTransactions } from '../controllers/transactionsController.js';
 
 const router = Router();
 
@@ -11,5 +11,8 @@ router.post('/', createTransaction);
 
 // GET /api/transactions?status=&bundle_id=&date_from=&date_to=&search=&page=&limit=
 router.get('/', listTransactions);
+
+// GET /api/transactions/:id
+router.get('/:id', getTransactionById);
 
 export default router;

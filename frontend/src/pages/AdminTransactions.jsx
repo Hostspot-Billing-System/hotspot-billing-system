@@ -23,6 +23,7 @@ import {
 
 import { getPackages } from '../services/packages';
 import { exportTransactionsCSV, fetchTransactions } from '../services/transactions';
+import TransactionDetailsModal from '../components/TransactionDetailsModal';
 
 function Icon({ path, size = 18, color = 'currentColor' }) {
   return (
@@ -127,6 +128,9 @@ export default function AdminTransactions() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [pageCount, setPageCount] = useState(1);
+
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
 
   // Debounce search input (keeps layout intact, reduces API chatter)
   useEffect(() => {
@@ -640,7 +644,10 @@ export default function AdminTransactions() {
                     <Button
                       size="small"
                       variant="outlined"
-                      onClick={() => console.log('[transactions] view', t.reference)}
+                      onClick={() => {
+                        setSelectedId(t.id);
+                        setDetailsOpen(true);
+                      }}
                       sx={{
                         minWidth: 34,
                         px: 0,
@@ -690,6 +697,15 @@ export default function AdminTransactions() {
           </Stack>
         </Box>
       </Paper>
+
+      <TransactionDetailsModal
+        open={detailsOpen}
+        transactionId={selectedId}
+        onClose={() => {
+          setDetailsOpen(false);
+          setSelectedId(null);
+        }}
+      />
     </Box>
   );
 }

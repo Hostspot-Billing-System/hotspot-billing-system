@@ -225,3 +225,29 @@ export async function exportTransactions(req, res) {
     return res.status(httpStatus).json(body);
   }
 }
+
+export async function getTransactionById(req, res) {
+  try {
+    console.info('GET /api/transactions/:id');
+    const id = req.params?.id;
+
+    const tx = await TransactionService.getTransactionById(id);
+    return res.status(200).json({
+      success: true,
+      data: tx,
+    });
+  } catch (err) {
+    if (err?.code === '42P01') {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'SCHEMA_MISSING',
+          message: "Database schema is missing (table 'transactions' not found). Apply the transactions migration, then retry.",
+        },
+      });
+    }
+
+    const { httpStatus, body } = toHttpError(err);
+    return res.status(httpStatus).json(body);
+  }
+}
