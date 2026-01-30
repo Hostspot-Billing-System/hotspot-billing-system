@@ -1,4 +1,5 @@
-import { TransactionService, toHttpError } from '../services/transactionService.js';
+import { TransactionService } from '../services/transactionService.js';
+import { TransactionsService, toHttpError as toHttpErrorTransactions } from '../services/transactionsService.js';
 
 function normalizeText(value) {
   const trimmed = String(value ?? '').trim();
@@ -18,8 +19,6 @@ function parseOptionalPositiveInt(value, fieldName) {
 
 export async function createTransaction(req, res) {
   try {
-    console.info('POST /api/transactions');
-
     const body = req.body ?? {};
 
     const bundle_id = body.bundle_id;
@@ -63,86 +62,44 @@ export async function createTransaction(req, res) {
       data: created,
     });
   } catch (err) {
-    // Friendly message if migration not applied.
-    if (err?.code === '42P01') {
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'SCHEMA_MISSING',
-          message: "Database schema is missing (table 'transactions' not found). Apply the transactions migration, then retry.",
-        },
-      });
-    }
-
-    const { httpStatus, body } = toHttpError(err);
+    const { httpStatus, body } = toHttpErrorTransactions(err);
     return res.status(httpStatus).json(body);
   }
 }
 
 export async function listTransactions(req, res) {
   try {
-    console.info('GET /api/transactions');
+    // Accept spec params + backward-compatible aliases used by earlier UI.
+    const params = {
+      search: normalizeText(req.query?.search ?? req.query?.q),
+      status: normalizeText(req.query?.status),
+      bundle: normalizeText(req.query?.bundle ?? req.query?.bundle_name ?? req.query?.bundleName),
+      fromDate:
+        normalizeText(req.query?.fromDate) ??
+        normalizeText(req.query?.date_from) ??
+        normalizeText(req.query?.from) ??
+        normalizeText(req.query?.start_date) ??
+        normalizeText(req.query?.start),
+      toDate:
+        normalizeText(req.query?.toDate) ??
+        normalizeText(req.query?.date_to) ??
+        normalizeText(req.query?.to) ??
+        normalizeText(req.query?.end_date) ??
+        normalizeText(req.query?.end),
+      minAmount: normalizeText(req.query?.minAmount ?? req.query?.min_amount),
+      maxAmount: normalizeText(req.query?.maxAmount ?? req.query?.max_amount),
+      page: req.query?.page,
+      perPage: req.query?.perPage ?? req.query?.per_page ?? req.query?.perpage ?? req.query?.limit,
+    };
 
-    const status = normalizeText(req.query?.status);
-
-    const bundle_id = normalizeText(req.query?.bundle_id ?? req.query?.bundleId);
-
-    const date_from =
-      normalizeText(req.query?.date_from) ??
-      normalizeText(req.query?.from) ??
-      normalizeText(req.query?.start_date) ??
-      normalizeText(req.query?.start);
-
-    const date_to =
-      normalizeText(req.query?.date_to) ??
-      normalizeText(req.query?.to) ??
-      normalizeText(req.query?.end_date) ??
-      normalizeText(req.query?.end);
-
-    const search = normalizeText(req.query?.search ?? req.query?.q);
-
-    const pageParsed = parseOptionalPositiveInt(req.query?.page, 'page');
-    if (pageParsed && !pageParsed.ok) {
-      return res.status(400).json({
-        success: false,
-        error: { code: pageParsed.code, message: pageParsed.message },
-      });
-    }
-
-    const limitParsed = parseOptionalPositiveInt(req.query?.limit, 'limit');
-    if (limitParsed && !limitParsed.ok) {
-      return res.status(400).json({
-        success: false,
-        error: { code: limitParsed.code, message: limitParsed.message },
-      });
-    }
-
-    const result = await TransactionService.listTransactions({
-      status,
-      bundle_id,
-      date_from,
-      date_to,
-      search,
-      page: pageParsed?.value ?? 1,
-      limit: limitParsed?.value ?? 20,
-    });
-
+    const result = await TransactionsService.listTransactions(params);
     return res.status(200).json({
       success: true,
-      ...result,
+      meta: result.meta,
+      data: result.data,
     });
   } catch (err) {
-    if (err?.code === '42P01') {
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'SCHEMA_MISSING',
-          message: "Database schema is missing (table 'transactions' not found). Apply the transactions migration, then retry.",
-        },
-      });
-    }
-
-    const { httpStatus, body } = toHttpError(err);
+    const { httpStatus, body } = toHttpErrorTransactions(err);
     return res.status(httpStatus).json(body);
   }
 }
@@ -158,46 +115,53 @@ function csvEscape(value) {
 
 export async function exportTransactions(req, res) {
   try {
-    console.info('GET /api/transactions/export');
+    const params = {
+      search: normalizeText(req.query?.search ?? req.query?.q),
+      status: normalizeText(req.query?.status),
+      bundle: normalizeText(req.query?.bundle ?? req.query?.bundle_name ?? req.query?.bundleName),
+      fromDate:
+        normalizeText(req.query?.fromDate) ??
+        normalizeText(req.query?.date_from) ??
+        normalizeText(req.query?.from) ??
+        normalizeText(req.query?.start_date) ??
+        normalizeText(req.query?.start),
+      toDate:
+        normalizeText(req.query?.toDate) ??
+        normalizeText(req.query?.date_to) ??
+        normalizeText(req.query?.to) ??
+        normalizeText(req.query?.end_date) ??
+        normalizeText(req.query?.end),
+      minAmount: normalizeText(req.query?.minAmount ?? req.query?.min_amount),
+      maxAmount: normalizeText(req.query?.maxAmount ?? req.query?.max_amount),
+    };
 
-    const status = normalizeText(req.query?.status);
-    const bundle_id = normalizeText(req.query?.bundle_id ?? req.query?.bundleId);
+    const rows = await TransactionsService.exportTransactions(params);
 
-    const date_from =
-      normalizeText(req.query?.date_from) ??
-      normalizeText(req.query?.from) ??
-      normalizeText(req.query?.start_date) ??
-      normalizeText(req.query?.start);
+    const header = [
+      'Date',
+      'Reference',
+      'Phone',
+      'Bundle',
+      'Amount (UGX)',
+      'Commission (UGX)',
+      'Net Amount (UGX)',
+      'Status',
+      'Provider',
+    ];
 
-    const date_to =
-      normalizeText(req.query?.date_to) ??
-      normalizeText(req.query?.to) ??
-      normalizeText(req.query?.end_date) ??
-      normalizeText(req.query?.end);
-
-    const search = normalizeText(req.query?.search ?? req.query?.q);
-
-    const rows = await TransactionService.listTransactionsExport({
-      status,
-      bundle_id,
-      date_from,
-      date_to,
-      search,
-    });
-
-    const header = ['reference', 'phone', 'bundle', 'amount', 'commission', 'status', 'created_at'];
     const lines = [header.join(',')];
-
     for (const row of rows) {
       lines.push(
         [
+          csvEscape(row.date),
           csvEscape(row.reference),
           csvEscape(row.phone),
           csvEscape(row.bundle),
-          csvEscape(row.amount),
-          csvEscape(row.commission),
+          csvEscape(row.amount_ugx),
+          csvEscape(row.commission_ugx),
+          csvEscape(row.net_amount_ugx),
           csvEscape(row.status),
-          csvEscape(row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at),
+          csvEscape(row.provider),
         ].join(',')
       );
     }
@@ -208,46 +172,20 @@ export async function exportTransactions(req, res) {
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
     return res.status(200).send(csv);
   } catch (err) {
-    if (err?.code === '42P01') {
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'SCHEMA_MISSING',
-          message: "Database schema is missing (table 'transactions' not found). Apply the transactions migration, then retry.",
-        },
-      });
-    }
-
-    const { httpStatus, body } = toHttpError(err);
+    const { httpStatus, body } = toHttpErrorTransactions(err);
     return res.status(httpStatus).json(body);
   }
 }
 
 export async function getTransactionById(req, res) {
   try {
-    console.info('GET /api/transactions/:id');
     const id = req.params?.id;
-
-    const tx = await TransactionService.getTransactionById(id);
-    return res.status(200).json({
-      success: true,
-      data: tx,
-    });
+    const tx = await TransactionsService.getTransactionById(id);
+    return res.status(200).json({ success: true, data: tx });
   } catch (err) {
-    if (err?.code === '42P01') {
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'SCHEMA_MISSING',
-          message: "Database schema is missing (table 'transactions' not found). Apply the transactions migration, then retry.",
-        },
-      });
-    }
-
-    const { httpStatus, body } = toHttpError(err);
+    const { httpStatus, body } = toHttpErrorTransactions(err);
     return res.status(httpStatus).json(body);
   }
 }

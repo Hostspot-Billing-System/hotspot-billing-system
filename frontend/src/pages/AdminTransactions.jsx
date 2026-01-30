@@ -155,14 +155,6 @@ export default function AdminTransactions() {
     };
   }, []);
 
-  const packagesById = useMemo(() => {
-    const m = new Map();
-    for (const p of packages) {
-      if (p?.id != null) m.set(String(p.id), p);
-    }
-    return m;
-  }, [packages]);
-
   const allBundles = useMemo(() => {
     return [...packages]
       .filter((p) => p && p.id != null)
@@ -179,14 +171,14 @@ export default function AdminTransactions() {
       try {
         const params = {
           status: status ? String(status).toLowerCase() : undefined,
-          bundle_id: bundle ? Number(bundle) : undefined,
-          date_from: fromDate || undefined,
-          date_to: toDate || undefined,
+          bundle: bundle || undefined,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
           search: searchQuery.trim() || undefined,
           page,
-          limit: perPage,
-          min_amount: minAmount || undefined,
-          max_amount: maxAmount || undefined,
+          perPage,
+          minAmount: minAmount || undefined,
+          maxAmount: maxAmount || undefined,
         };
 
         const result = await fetchTransactions(params);
@@ -194,8 +186,8 @@ export default function AdminTransactions() {
 
         if (!cancelled) {
           setRows(list);
-          setTotal(Number(result?.total ?? 0));
-          setPageCount(Math.max(1, Number(result?.total_pages ?? 1)));
+          setTotal(Number(result?.meta?.total ?? 0));
+          setPageCount(Math.max(1, Number(result?.meta?.totalPages ?? 1)));
         }
       } catch (e) {
         if (!cancelled) {
@@ -215,11 +207,8 @@ export default function AdminTransactions() {
   }, [bundle, fromDate, maxAmount, minAmount, page, perPage, reloadKey, searchQuery, status, toDate]);
 
   const visible = useMemo(() => {
-    const min = Number(minAmount);
-    const max = maxAmount ? Number(maxAmount) : null;
     return rows
       .map((r) => {
-        const bundleName = packagesById.get(String(r.bundle_id))?.name ?? String(r.bundle_id ?? '');
         return {
           id: r.id,
           created_at: r.created_at,
@@ -227,16 +216,10 @@ export default function AdminTransactions() {
           customer: r.customer_phone ?? '',
           amount: r.amount_ugx,
           status: capitalize(r.status),
-          bundle: bundleName,
+          bundle: r.bundle_name ?? '',
         };
-      })
-      .filter((t) => {
-        const amountN = Number(t.amount);
-        if (Number.isFinite(min) && amountN < min) return false;
-        if (max != null && Number.isFinite(max) && amountN > max) return false;
-        return true;
       });
-  }, [maxAmount, minAmount, packagesById, rows]);
+  }, [rows]);
 
   const showing = visible.length;
 
@@ -361,7 +344,7 @@ export default function AdminTransactions() {
               >
                 <MenuItem value="">All Bundles</MenuItem>
                 {allBundles.map((b) => (
-                  <MenuItem key={String(b.id)} value={String(b.id)}>
+                  <MenuItem key={String(b.id)} value={String(b.name ?? '')}>
                     {b.name}
                   </MenuItem>
                 ))}
@@ -490,12 +473,12 @@ export default function AdminTransactions() {
                   setExporting(true);
                   const params = {
                     status: status ? String(status).toLowerCase() : undefined,
-                    bundle_id: bundle ? Number(bundle) : undefined,
-                    date_from: fromDate || undefined,
-                    date_to: toDate || undefined,
+                    bundle: bundle || undefined,
+                    fromDate: fromDate || undefined,
+                    toDate: toDate || undefined,
                     search: searchQuery.trim() || undefined,
-                    min_amount: minAmount || undefined,
-                    max_amount: maxAmount || undefined,
+                    minAmount: minAmount || undefined,
+                    maxAmount: maxAmount || undefined,
                   };
 
                   const { blob, filename } = await exportTransactionsCSV(params);
