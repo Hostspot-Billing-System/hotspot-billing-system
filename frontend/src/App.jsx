@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminBundles from './pages/AdminBundles';
 import AdminVoucherUpload from './pages/AdminVoucherUpload';
+import AdminVouchers from './pages/AdminVouchers';
 import BatchHistory from './pages/BatchHistory';
-import Vouchers from './pages/Vouchers';
 
 function getPath() {
   if (typeof window === 'undefined') return '/';
@@ -39,9 +40,10 @@ export default function App() {
 
   const content = useMemo(() => {
     if (path === '/admin' || path === '/admin/dashboard') return <AdminDashboard />;
+    if (path === '/admin/bundles') return <AdminBundles />;
     if (path === '/admin/voucher-upload') return <AdminVoucherUpload />;
     if (path === '/admin/batches') return <BatchHistory />;
-    if (path === '/admin/vouchers') return <Vouchers />;
+    if (path === '/admin/vouchers') return <AdminVouchers />;
 
     // Default to admin dashboard for unknown paths
     if (path?.startsWith('/admin')) return <AdminDashboard />;

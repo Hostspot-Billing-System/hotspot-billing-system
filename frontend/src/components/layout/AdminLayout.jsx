@@ -3,14 +3,10 @@ import {
   AppBar,
   Box,
   CssBaseline,
-  Divider,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemText,
   Toolbar,
   Typography,
 } from '@mui/material';
+import AdminSidebar, { ADMIN_SIDEBAR_MENU } from './AdminSidebar';
 
 const drawerWidth = 240;
 
@@ -39,19 +35,31 @@ export default function AdminLayout({
 
   const resolvedTitle = useMemo(() => {
     if (activeKey) {
-      const match = items.find((i) => i.key === activeKey);
+      const match = ADMIN_SIDEBAR_MENU.find((i) => i.key === activeKey) || items.find((i) => i.key === activeKey);
       if (match?.label) return match.label;
     }
 
-    const matchByPath = items.find((i) => i.path && i.path === resolvedActivePath);
+    const matchByPath =
+      ADMIN_SIDEBAR_MENU.find((i) => i.path && i.path === resolvedActivePath) ||
+      items.find((i) => i.path && i.path === resolvedActivePath);
     if (matchByPath?.label) return matchByPath.label;
 
     return title;
   }, [activeKey, items, resolvedActivePath, title]);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ minHeight: '100vh' }}>
       <CssBaseline />
+
+      <AdminSidebar
+        title="Hotspot System"
+        width={drawerWidth}
+        activeKey={activeKey}
+        activePath={resolvedActivePath}
+        onNavigate={(item) => {
+          if (typeof onNavigate === 'function') onNavigate(item);
+        }}
+      />
 
       <AppBar
         position="fixed"
@@ -59,6 +67,8 @@ export default function AdminLayout({
         elevation={0}
         sx={{
           zIndex: (theme) => theme.zIndex.drawer + 1,
+          ml: `${drawerWidth}px`,
+          width: `calc(100% - ${drawerWidth}px)`,
           borderBottom: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
@@ -71,51 +81,10 @@ export default function AdminLayout({
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          [`& .MuiDrawer-paper`]: {
-            width: drawerWidth,
-            boxSizing: 'border-box',
-            borderRight: 1,
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-          },
-        }}
-      >
-        <Toolbar>
-          <Typography variant="subtitle1" fontWeight={800}>
-            Hotspot Admin
-          </Typography>
-        </Toolbar>
-        <Divider />
-        <List>
-          {items.map((item) => {
-            const selected =
-              (activeKey != null && item.key === activeKey) ||
-              (activeKey == null && item.path && item.path === resolvedActivePath);
-
-            return (
-              <ListItemButton
-                key={item.key}
-                selected={selected}
-                onClick={() => {
-                  if (typeof onNavigate === 'function') onNavigate(item);
-                }}
-              >
-                <ListItemText primary={item.label} />
-              </ListItemButton>
-            );
-          })}
-        </List>
-      </Drawer>
-
       <Box
         component="main"
         sx={{
-          flexGrow: 1,
+          ml: `${drawerWidth}px`,
           bgcolor: (theme) => theme.palette.grey[50],
           minHeight: '100vh',
         }}

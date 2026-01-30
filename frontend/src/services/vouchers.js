@@ -32,3 +32,9 @@ export async function redeemVoucher({ code }) {
   const response = await api.post('/api/vouchers/redeem', { code });
   return response.data;
 }
+
+// DELETE /api/vouchers/:id
+export async function deleteVoucherById(id) {
+  const response = await api.delete(`/api/vouchers/${id}`);
+  return response.data;
+}

@@ -41,6 +41,19 @@ function formatDate(value) {
   return d.toLocaleString();
 }
 
+function formatDateMultiline(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return (
+    <span>
+      {d.toLocaleDateString()}
+      <br />
+      {d.toLocaleTimeString()}
+    </span>
+  );
+}
+
 function statusChip(status) {
   const s = String(status ?? '').toLowerCase();
   if (s === 'available') return <Chip size="small" color="success" label="Available" />;
@@ -258,7 +271,7 @@ export default function AdminVoucherList({ initialFilters }) {
                       <TableCell>{statusChip(r.status)}</TableCell>
                       <TableCell>{r.package_name}</TableCell>
                       <TableCell>{r.batch_id ?? ''}</TableCell>
-                      <TableCell>{formatDate(r.created_at)}</TableCell>
+                      <TableCell>{formatDateMultiline(r.created_at)}</TableCell>
                       <TableCell>{formatDate(r.used_at)}</TableCell>
                     </TableRow>
                   ))

@@ -40,6 +40,19 @@ function formatDate(value) {
   return d.toLocaleString();
 }
 
+function formatDateMultiline(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return (
+    <span>
+      {d.toLocaleDateString()}
+      <br />
+      {d.toLocaleTimeString()}
+    </span>
+  );
+}
+
 function StatusBadge({ status }) {
   const s = String(status ?? '').toLowerCase();
 
@@ -304,7 +317,7 @@ export default function Vouchers() {
                         </TableCell>
                         <TableCell>{r.package_name}</TableCell>
                         <TableCell>{r.batch_id ? batchLabelById.get(String(r.batch_id)) ?? `#${r.batch_id}` : ''}</TableCell>
-                        <TableCell>{formatDate(r.created_at)}</TableCell>
+                        <TableCell>{formatDateMultiline(r.created_at)}</TableCell>
                         <TableCell>{formatDate(r.used_at)}</TableCell>
                       </TableRow>
                     ))
