@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminBundles from './pages/AdminBundles';
+import AdminReports from './pages/AdminReports';
 import AdminTransactions from './pages/AdminTransactions';
 import AdminWithdraw from './pages/AdminWithdraw';
 import AdminVoucherUpload from './pages/AdminVoucherUpload';
@@ -38,6 +39,7 @@ export default function App() {
       { key: 'vouchers', label: 'Vouchers', path: '/admin/vouchers' },
       { key: 'transactions', label: 'Transactions', path: '/admin/transactions' },
       { key: 'withdraw', label: 'Withdraw', path: '/admin/withdraw' },
+      { key: 'reports', label: 'Reports', path: '/admin/reports' },
     ],
     []
   );
@@ -47,6 +49,7 @@ export default function App() {
     if (path === '/admin/bundles') return <AdminBundles />;
     if (path === '/admin/transactions') return <AdminTransactions />;
     if (path === '/admin/withdraw') return <AdminWithdraw />;
+    if (path === '/admin/reports') return <AdminReports />;
     if (path === '/admin/voucher-upload') return <AdminVoucherUpload />;
     if (path === '/admin/batches') return <BatchHistory />;
     if (path === '/admin/vouchers') return <AdminVouchers />;
