@@ -96,6 +96,7 @@ export class VouchersService {
     const result = await query(
       `
       SELECT
+        v.id::int AS id,
         v.code,
         ${EFFECTIVE_STATUS_SQL} AS status,
         p.name AS package_name,
