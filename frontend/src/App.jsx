@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminBundles from './pages/AdminBundles';
+import AdminTransactions from './pages/AdminTransactions';
+import AdminWithdraw from './pages/AdminWithdraw';
 import AdminVoucherUpload from './pages/AdminVoucherUpload';
 import AdminVouchers from './pages/AdminVouchers';
 import BatchHistory from './pages/BatchHistory';
@@ -34,6 +36,8 @@ export default function App() {
       { key: 'upload', label: 'Voucher Upload', path: '/admin/voucher-upload' },
       { key: 'batches', label: 'Batch History', path: '/admin/batches' },
       { key: 'vouchers', label: 'Vouchers', path: '/admin/vouchers' },
+      { key: 'transactions', label: 'Transactions', path: '/admin/transactions' },
+      { key: 'withdraw', label: 'Withdraw', path: '/admin/withdraw' },
     ],
     []
   );
@@ -41,6 +45,8 @@ export default function App() {
   const content = useMemo(() => {
     if (path === '/admin' || path === '/admin/dashboard') return <AdminDashboard />;
     if (path === '/admin/bundles') return <AdminBundles />;
+    if (path === '/admin/transactions') return <AdminTransactions />;
+    if (path === '/admin/withdraw') return <AdminWithdraw />;
     if (path === '/admin/voucher-upload') return <AdminVoucherUpload />;
     if (path === '/admin/batches') return <BatchHistory />;
     if (path === '/admin/vouchers') return <AdminVouchers />;
