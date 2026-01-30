@@ -22,7 +22,7 @@ import {
 } from '@mui/material';
 
 import { getPackages } from '../services/packages';
-import { exportTransactionsCSV, fetchTransactions } from '../services/transactions';
+import { exportTransactionsCSV, fetchTransactions } from '../api/transactions';
 import TransactionDetailsModal from '../components/TransactionDetailsModal';
 
 function Icon({ path, size = 18, color = 'currentColor' }) {
@@ -78,6 +78,7 @@ function StatusPill({ status }) {
   const s = String(status ?? '').toLowerCase();
   const isCompleted = s === 'completed' || s === 'success' || s === 'paid';
   const isFailed = s === 'failed' || s === 'error';
+  const isPending = s === 'pending';
 
   return (
     <Chip
@@ -88,7 +89,7 @@ function StatusPill({ status }) {
         fontWeight: 900,
         fontSize: 11,
         borderRadius: 999,
-        bgcolor: isCompleted ? '#15803d' : isFailed ? '#ef4444' : '#64748b',
+        bgcolor: isCompleted ? '#15803d' : isFailed ? '#ef4444' : isPending ? '#f59e0b' : '#64748b',
         color: 'common.white',
         '& .MuiChip-label': { px: 1, py: 0 },
       }}
@@ -131,12 +132,6 @@ export default function AdminTransactions() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-
-  // Debounce search input (keeps layout intact, reduces API chatter)
-  useEffect(() => {
-    const t = setTimeout(() => setSearchQuery(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -262,6 +257,7 @@ export default function AdminTransactions() {
             variant="outlined"
             onClick={() => {
               setSearch('');
+              setSearchQuery('');
               setStatus('');
               setBundle('');
               setFromDate('');
@@ -270,6 +266,7 @@ export default function AdminTransactions() {
               setMaxAmount('');
               setPerPage(20);
               setPage(1);
+              setReloadKey((k) => k + 1);
             }}
             sx={{
               textTransform: 'none',
@@ -302,7 +299,6 @@ export default function AdminTransactions() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setPage(1);
               }}
               InputProps={{
                 startAdornment: (
@@ -328,6 +324,7 @@ export default function AdminTransactions() {
                 <MenuItem value="">All Status</MenuItem>
                 <MenuItem value="Completed">Completed</MenuItem>
                 <MenuItem value="Failed">Failed</MenuItem>
+                <MenuItem value="Pending">Pending</MenuItem>
               </Select>
             </FormControl>
 
@@ -481,11 +478,7 @@ export default function AdminTransactions() {
                     maxAmount: maxAmount || undefined,
                   };
 
-                  const { blob, filename } = await exportTransactionsCSV(params);
-                  downloadBlob({
-                    blob,
-                    filename: filename || `transactions_${new Date().toISOString().slice(0, 10)}.csv`,
-                  });
+                  await exportTransactionsCSV(params);
                 } catch {
                   // ignore
                 } finally {
@@ -651,34 +644,38 @@ export default function AdminTransactions() {
           </Table>
         </TableContainer>
 
-        <Divider sx={{ borderColor: '#eef2f7' }} />
+        {total > 0 && !loading && !error ? (
+          <>
+            <Divider sx={{ borderColor: '#eef2f7' }} />
 
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
-            Page {page} of {pageCount}
-          </Typography>
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                Page {page} of {pageCount}
+              </Typography>
 
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              sx={{ textTransform: 'none', borderRadius: 1 }}
-            >
-              Prev
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              disabled={page >= pageCount}
-              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-              sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' } }}
-            >
-              Next
-            </Button>
-          </Stack>
-        </Box>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  sx={{ textTransform: 'none', borderRadius: 1 }}
+                >
+                  Prev
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={page >= pageCount}
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' } }}
+                >
+                  Next
+                </Button>
+              </Stack>
+            </Box>
+          </>
+        ) : null}
       </Paper>
 
       <TransactionDetailsModal
