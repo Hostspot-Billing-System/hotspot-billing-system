@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -20,6 +20,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+
+import { getPackages } from '../services/packages';
+import { exportTransactionsCSV, fetchTransactions } from '../services/transactions';
 
 function Icon({ path, size = 18, color = 'currentColor' }) {
   return (
@@ -64,6 +67,12 @@ function formatCurrencyUGX(value) {
   return `${n.toLocaleString()} UGX`;
 }
 
+function capitalize(value) {
+  const s = String(value ?? '').trim();
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
 function StatusPill({ status }) {
   const s = String(status ?? '').toLowerCase();
   const isCompleted = s === 'completed' || s === 'success' || s === 'paid';
@@ -86,42 +95,7 @@ function StatusPill({ status }) {
   );
 }
 
-const PLACEHOLDER_TRANSACTIONS = Array.from({ length: 28 }).map((_, idx) => {
-  const minutesAgo = idx * 11;
-  const d = new Date(Date.now() - minutesAgo * 60 * 1000);
-  const status = idx % 5 === 0 ? 'Failed' : 'Completed';
-  const amount = idx % 3 === 0 ? 500 : idx % 3 === 1 ? 1000 : 1500;
-  const bundle = idx % 3 === 0 ? '2 Hours Unlimited' : idx % 3 === 1 ? '12 Hours Unlimited' : 'Daily Unlimited';
-
-  return {
-    id: idx + 1,
-    created_at: d.toISOString(),
-    reference: `PAY-${(Math.random() + 1).toString(36).slice(2, 14).toUpperCase()}`,
-    customer: `2567${String(700000000 + idx * 13259).slice(0, 8)}`,
-    amount,
-    status,
-    bundle,
-  };
-});
-
-function downloadCsv(filename, rows) {
-  const header = ['created_at', 'reference', 'customer', 'amount', 'status', 'bundle'];
-  const escape = (v) => {
-    const s = String(v ?? '');
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-
-  const lines = [header.join(',')];
-  for (const r of rows) {
-    lines.push(
-      [r.created_at, r.reference, r.customer, r.amount, r.status, r.bundle]
-        .map(escape)
-        .join(',')
-    );
-  }
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+function downloadBlob({ blob, filename }) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -134,6 +108,7 @@ function downloadCsv(filename, rows) {
 
 export default function AdminTransactions() {
   const [search, setSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [status, setStatus] = useState('');
   const [bundle, setBundle] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -143,53 +118,121 @@ export default function AdminTransactions() {
   const [perPage, setPerPage] = useState(20);
   const [page, setPage] = useState(1);
 
-  const allBundles = useMemo(() => {
-    const set = new Set();
-    for (const t of PLACEHOLDER_TRANSACTIONS) set.add(t.bundle);
-    return Array.from(set).sort();
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState('');
+
+  const [packages, setPackages] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
+
+  // Debounce search input (keeps layout intact, reduces API chatter)
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await getPackages();
+        const list = Array.isArray(response?.data) ? response.data : [];
+        if (!cancelled) setPackages(list);
+      } catch {
+        if (!cancelled) setPackages([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const min = Number(minAmount);
-    const max = maxAmount ? Number(maxAmount) : null;
-    const fromMs = fromDate ? new Date(fromDate).getTime() : null;
-    const toMs = toDate ? new Date(toDate).getTime() : null;
+  const packagesById = useMemo(() => {
+    const m = new Map();
+    for (const p of packages) {
+      if (p?.id != null) m.set(String(p.id), p);
+    }
+    return m;
+  }, [packages]);
 
-    return PLACEHOLDER_TRANSACTIONS.filter((t) => {
-      if (q) {
-        const hay = `${t.reference} ${t.customer} ${t.bundle}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+  const allBundles = useMemo(() => {
+    return [...packages]
+      .filter((p) => p && p.id != null)
+      .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
+  }, [packages]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const params = {
+          status: status ? String(status).toLowerCase() : undefined,
+          bundle_id: bundle ? Number(bundle) : undefined,
+          date_from: fromDate || undefined,
+          date_to: toDate || undefined,
+          search: searchQuery.trim() || undefined,
+          page,
+          limit: perPage,
+          min_amount: minAmount || undefined,
+          max_amount: maxAmount || undefined,
+        };
+
+        const result = await fetchTransactions(params);
+        const list = Array.isArray(result?.data) ? result.data : [];
+
+        if (!cancelled) {
+          setRows(list);
+          setTotal(Number(result?.total ?? 0));
+          setPageCount(Math.max(1, Number(result?.total_pages ?? 1)));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setRows([]);
+          setTotal(0);
+          setPageCount(1);
+          setError(e?.response?.data?.error?.message ?? e?.message ?? 'Failed to load transactions');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
 
-      if (status) {
-        if (String(t.status).toLowerCase() !== String(status).toLowerCase()) return false;
-      }
-
-      if (bundle) {
-        if (t.bundle !== bundle) return false;
-      }
-
-      const amountN = Number(t.amount);
-      if (Number.isFinite(min) && amountN < min) return false;
-      if (max != null && Number.isFinite(max) && amountN > max) return false;
-
-      const createdMs = new Date(t.created_at).getTime();
-      if (fromMs != null && Number.isFinite(fromMs) && createdMs < fromMs) return false;
-      if (toMs != null && Number.isFinite(toMs) && createdMs > toMs) return false;
-
-      return true;
-    });
-  }, [bundle, fromDate, maxAmount, minAmount, search, status, toDate]);
-
-  const total = filtered.length;
-  const pageCount = Math.max(1, Math.ceil(total / perPage));
+    return () => {
+      cancelled = true;
+    };
+  }, [bundle, fromDate, maxAmount, minAmount, page, perPage, reloadKey, searchQuery, status, toDate]);
 
   const visible = useMemo(() => {
-    const safePage = Math.min(Math.max(page, 1), pageCount);
-    const start = (safePage - 1) * perPage;
-    return filtered.slice(start, start + perPage);
-  }, [filtered, page, pageCount, perPage]);
+    const min = Number(minAmount);
+    const max = maxAmount ? Number(maxAmount) : null;
+    return rows
+      .map((r) => {
+        const bundleName = packagesById.get(String(r.bundle_id))?.name ?? String(r.bundle_id ?? '');
+        return {
+          id: r.id,
+          created_at: r.created_at,
+          reference: r.reference,
+          customer: r.customer_phone ?? '',
+          amount: r.amount_ugx,
+          status: capitalize(r.status),
+          bundle: bundleName,
+        };
+      })
+      .filter((t) => {
+        const amountN = Number(t.amount);
+        if (Number.isFinite(min) && amountN < min) return false;
+        if (max != null && Number.isFinite(max) && amountN > max) return false;
+        return true;
+      });
+  }, [maxAmount, minAmount, packagesById, rows]);
 
   const showing = visible.length;
 
@@ -314,8 +357,8 @@ export default function AdminTransactions() {
               >
                 <MenuItem value="">All Bundles</MenuItem>
                 {allBundles.map((b) => (
-                  <MenuItem key={b} value={b}>
-                    {b}
+                  <MenuItem key={String(b.id)} value={String(b.id)}>
+                    {b.name}
                   </MenuItem>
                 ))}
               </Select>
@@ -416,7 +459,11 @@ export default function AdminTransactions() {
           <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <Button
               variant="contained"
-              onClick={() => setPage(1)}
+              onClick={() => {
+                setSearchQuery(search);
+                setPage(1);
+                setReloadKey((k) => k + 1);
+              }}
               startIcon={<Icon path={ICONS.search} size={16} color="#fff" />}
               sx={{
                 textTransform: 'none',
@@ -433,7 +480,31 @@ export default function AdminTransactions() {
 
             <Button
               variant="outlined"
-              onClick={() => downloadCsv(`transactions_${new Date().toISOString().slice(0, 10)}.csv`, filtered)}
+              disabled={exporting}
+              onClick={async () => {
+                try {
+                  setExporting(true);
+                  const params = {
+                    status: status ? String(status).toLowerCase() : undefined,
+                    bundle_id: bundle ? Number(bundle) : undefined,
+                    date_from: fromDate || undefined,
+                    date_to: toDate || undefined,
+                    search: searchQuery.trim() || undefined,
+                    min_amount: minAmount || undefined,
+                    max_amount: maxAmount || undefined,
+                  };
+
+                  const { blob, filename } = await exportTransactionsCSV(params);
+                  downloadBlob({
+                    blob,
+                    filename: filename || `transactions_${new Date().toISOString().slice(0, 10)}.csv`,
+                  });
+                } catch {
+                  // ignore
+                } finally {
+                  setExporting(false);
+                }
+              }}
               startIcon={<Icon path={ICONS.export} size={16} color="#16a34a" />}
               sx={{
                 textTransform: 'none',
@@ -486,8 +557,33 @@ export default function AdminTransactions() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {visible.map((t) => (
-                <TableRow key={t.id} hover>
+              {loading ? (
+                <TableRow hover>
+                  <TableCell colSpan={7} sx={{ py: 3 }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                      Loading transactions…
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow hover>
+                  <TableCell colSpan={7} sx={{ py: 3 }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                      {error}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : visible.length === 0 ? (
+                <TableRow hover>
+                  <TableCell colSpan={7} sx={{ py: 3 }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                      No transactions found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visible.map((t) => (
+                  <TableRow key={t.id} hover>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     <Box component="span" sx={{ display: 'block', fontWeight: 800 }}>
                       {formatDateOnly(t.created_at)}
@@ -559,7 +655,8 @@ export default function AdminTransactions() {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </TableContainer>
