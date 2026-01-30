@@ -5,6 +5,7 @@ import captiveRoutes from "./routes/captiveRoutes.js";
 import vouchersRoutes from "./routes/vouchersRoutes.js";
 import packagesRoutes from "./routes/packagesRoutes.js";
 import voucherBatchesRoutes from "./routes/voucherBatchesRoutes.js";
+import transactionsRoutes from "./routes/transactionsRoutes.js";
 
 const app = express();
 
@@ -36,5 +37,6 @@ app.use("/api/captive", captiveRoutes);
 app.use("/api/vouchers", vouchersRoutes);
 app.use("/api/packages", packagesRoutes);
 app.use("/api/voucher-batches", voucherBatchesRoutes);
+app.use("/api/transactions", transactionsRoutes);
 
 export default app;

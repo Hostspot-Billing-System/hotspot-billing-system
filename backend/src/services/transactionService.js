@@ -188,6 +188,113 @@ export class TransactionService {
       client.release();
     }
   }
+
+  static async listTransactions({
+    status,
+    bundle_id,
+    date_from,
+    date_to,
+    search,
+    page = 1,
+    limit = 20,
+  } = {}) {
+    const normalizedStatus = normalizeText(status);
+    if (normalizedStatus && normalizedStatus !== 'completed' && normalizedStatus !== 'failed') {
+      throw new DomainError('BAD_REQUEST', `Invalid status: ${status}`, 400);
+    }
+
+    const conditions = [];
+    const params = [];
+
+    if (normalizedStatus) {
+      params.push(normalizedStatus);
+      conditions.push(`t.status = $${params.length}`);
+    }
+
+    if (bundle_id != null && String(bundle_id).trim() !== '') {
+      const bundleId = parseRequiredPositiveBigint(bundle_id, 'bundle_id');
+      params.push(bundleId);
+      conditions.push(`t.bundle_id = $${params.length}`);
+    }
+
+    const fromRaw = normalizeText(date_from);
+    if (fromRaw) {
+      const from = new Date(fromRaw);
+      if (Number.isNaN(from.getTime())) {
+        throw new DomainError('BAD_REQUEST', 'date_from must be a valid date', 400);
+      }
+      params.push(from.toISOString());
+      conditions.push(`t.created_at >= $${params.length}::timestamptz`);
+    }
+
+    const toRaw = normalizeText(date_to);
+    if (toRaw) {
+      const to = new Date(toRaw);
+      if (Number.isNaN(to.getTime())) {
+        throw new DomainError('BAD_REQUEST', 'date_to must be a valid date', 400);
+      }
+      params.push(to.toISOString());
+      conditions.push(`t.created_at <= $${params.length}::timestamptz`);
+    }
+
+    const q = normalizeText(search);
+    if (q) {
+      params.push(`%${q}%`);
+      const idx = params.length;
+      conditions.push(`(t.reference ILIKE $${idx} OR t.customer_phone ILIKE $${idx})`);
+    }
+
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
+    const offset = (safePage - 1) * safeLimit;
+
+    const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countRes = await pool.query(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM transactions t
+      ${whereSql}
+      `,
+      params
+    );
+
+    const total = countRes.rows?.[0]?.total ?? 0;
+
+    params.push(safeLimit);
+    const limitParam = params.length;
+    params.push(offset);
+    const offsetParam = params.length;
+
+    const rowsRes = await pool.query(
+      `
+      SELECT
+        t.id,
+        t.reference,
+        t.voucher_code,
+        t.bundle_id,
+        t.customer_phone,
+        t.amount_ugx,
+        t.commission_ugx,
+        t.status,
+        t.payment_method,
+        t.created_at
+      FROM transactions t
+      ${whereSql}
+      ORDER BY t.created_at DESC, t.id DESC
+      LIMIT $${limitParam} OFFSET $${offsetParam}
+      `,
+      params
+    );
+
+    return {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      total_pages: total ? Math.ceil(total / safeLimit) : 0,
+      data: rowsRes.rows,
+    };
+  }
 }
 
 export function toHttpError(err) {
