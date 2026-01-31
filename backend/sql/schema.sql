@@ -116,6 +116,23 @@ CREATE INDEX IF NOT EXISTS idx_vouchers_available ON vouchers(code)
 CREATE INDEX IF NOT EXISTS idx_sessions_voucher_id ON hotspot_sessions(voucher_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_started_at ON hotspot_sessions(started_at);
 
+-- Captive portal sessions: lightweight, short-lived records for portal bootstrapping.
+-- Safe to call multiple times; idempotent by (mac_address, ip_address).
+CREATE TABLE IF NOT EXISTS portal_sessions (
+  id          BIGSERIAL PRIMARY KEY,
+  mac_address TEXT NOT NULL,
+  ip_address  INET NOT NULL,
+  interface   TEXT NULL,
+  router_id   TEXT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT portal_sessions_mac_ip_unique UNIQUE (mac_address, ip_address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_portal_sessions_mac ON portal_sessions(mac_address);
+CREATE INDEX IF NOT EXISTS idx_portal_sessions_updated_at ON portal_sessions(updated_at);
+
 -- Auto-assign vouchers.batch_id during CSV upload without changing app code.
 -- When a voucher is inserted with a NULL batch_id, attach it to the most recent
 -- voucher_batches row for the same package_id visible in the current transaction.
