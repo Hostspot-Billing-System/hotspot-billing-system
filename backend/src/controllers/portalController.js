@@ -1,4 +1,5 @@
 import { upsertPortalSession, PortalSessionError } from '../services/portalSessionService.js';
+import { listActiveBundles } from '../services/bundlesService.js';
 
 export async function getPortalContextHandler(req, res) {
 	try {
@@ -27,6 +28,25 @@ export async function getPortalContextHandler(req, res) {
 			});
 		}
 
+		return res.status(500).json({
+			success: false,
+			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+		});
+	}
+}
+
+export async function getPortalBundlesHandler(_req, res) {
+	try {
+		const bundles = await listActiveBundles();
+
+		// Cached-friendly (public catalog data)
+		res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+
+		return res.status(200).json({
+			success: true,
+			data: bundles,
+		});
+	} catch (err) {
 		return res.status(500).json({
 			success: false,
 			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
