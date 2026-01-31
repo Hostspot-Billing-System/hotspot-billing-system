@@ -1,96 +1,124 @@
 import React from 'react';
 
 import PortalLayout from './PortalLayout.jsx';
-import PortalVoucher from './PortalVoucher.jsx';
-import PortalBundles, { DEFAULT_BUNDLES } from './PortalBundles.jsx';
-import PortalPay from './PortalPay.jsx';
-import PortalSuccess from './PortalSuccess.jsx';
-
-function PortalHomeScreen({ onVoucher, onBuy }) {
-	return (
-		<div className="p-6">
-			<div className="mb-6 text-center">
-				<div className="text-sm font-semibold tracking-wide text-white/70">Welcome to</div>
-				<h1 className="mt-1 text-2xl font-extrabold text-white">Hotspot Internet</h1>
-				<p className="mt-2 text-sm text-white/65">
-					Connect instantly with a voucher or purchase a bundle.
-				</p>
-			</div>
-
-			<div className="space-y-3">
-				<button
-					type="button"
-					onClick={onVoucher}
-					className="w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white shadow-sm ring-1 ring-white/10 transition hover:bg-white/15"
-				>
-					Connect with Voucher
-				</button>
-				<button
-					type="button"
-					onClick={onBuy}
-					className="w-full rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-400"
-				>
-					Buy Internet
-				</button>
-			</div>
-
-			<div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-4">
-				<div className="text-xs font-semibold text-white/80">Need help?</div>
-				<div className="mt-1 text-sm text-white/70">Call: 0707434218</div>
-			</div>
-		</div>
-	);
-}
 
 export default function PortalHome() {
-	const [route, setRoute] = React.useState('home');
 	const [voucherCode, setVoucherCode] = React.useState('');
 	const [phone, setPhone] = React.useState('256707434218');
-	const [selectedBundle, setSelectedBundle] = React.useState(DEFAULT_BUNDLES[0]);
 
-	function go(next) {
-		setRoute(next);
-	}
+	const bundles = React.useMemo(
+		() => [
+			{ id: '2h', label: '2 Hours', price: '500 UGX' },
+			{ id: '12h', label: '12 Hours', price: '1,000 UGX' },
+			{ id: 'daily', label: 'Daily', price: '1,500 UGX' },
+			{ id: 'weekly', label: 'Weekly', price: '6,000 UGX' },
+			{ id: 'monthly', label: 'Monthly', price: '23,000 UGX' },
+		],
+		[],
+	);
 
 	return (
 		<PortalLayout>
-			{route === 'home' && (
-				<PortalHomeScreen onVoucher={() => go('voucher')} onBuy={() => go('bundles')} />
-			)}
+			<div className="px-5 pb-6 pt-5">
+				<div className="text-center">
+					<div className="text-[11px] font-extrabold tracking-widest text-white/70">
+						CONNECT WITH VOUCHER
+					</div>
+				</div>
 
-			{route === 'voucher' && (
-				<PortalVoucher
-					voucherCode={voucherCode}
-					onVoucherCodeChange={setVoucherCode}
-					onConnect={() => go('success')}
-					onBuyInstead={() => go('bundles')}
-					onBack={() => go('home')}
-				/>
-			)}
+				<div className="mt-4 space-y-3">
+					<input
+						type="text"
+						inputMode="text"
+						autoComplete="one-time-code"
+						placeholder="Enter voucher code"
+						value={voucherCode}
+						onChange={(e) => setVoucherCode(e.target.value)}
+						className="w-full rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[13px] font-semibold text-white placeholder:text-white/40 outline-none focus:border-white/20"
+					/>
+					<button
+						type="button"
+						onClick={() => {}}
+						className="w-full cursor-pointer rounded-xl bg-emerald-600 px-4 py-3 text-[13px] font-extrabold tracking-wide text-white shadow-[0_10px_22px_rgba(16,185,129,0.22)] transition hover:bg-emerald-500"
+					>
+						CONNECT
+					</button>
+				</div>
 
-			{route === 'bundles' && (
-				<PortalBundles
-					phone={phone}
-					onPhoneChange={setPhone}
-					selectedBundle={selectedBundle}
-					onSelectBundle={(b) => {
-						setSelectedBundle(b);
-						go('pay');
-					}}
-					onBack={() => go('home')}
-				/>
-			)}
+				<div className="mt-5 text-center">
+					<div className="text-[11px] font-semibold text-white/60">
+						You can also buy internet using
+					</div>
+					<div className="mt-3 flex items-center justify-center gap-3">
+						<div className="flex items-center justify-center rounded-lg bg-[#e11d48] px-3 py-2 shadow-sm">
+							<div className="text-[11px] font-extrabold uppercase tracking-wide text-white">
+								airtel money
+							</div>
+						</div>
+						<div className="flex items-center justify-center rounded-lg bg-[#fbbf24] px-3 py-2 shadow-sm">
+							<div className="text-[11px] font-extrabold uppercase tracking-wide text-black">
+								MTN MoMo
+							</div>
+						</div>
+					</div>
+				</div>
 
-			{route === 'pay' && (
-				<PortalPay
-					bundle={selectedBundle}
-					phone={phone}
-					onPayNow={() => go('success')}
-					onBack={() => go('bundles')}
-				/>
-			)}
+				<div className="mt-5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-4">
+					<div className="text-center text-[12px] font-extrabold text-emerald-300">
+						Enter your phone number to purchase bundles
+					</div>
+					<div className="mt-0.5 text-center text-[12px] font-extrabold text-emerald-300">
+						after tap buy now on the bundle
+					</div>
 
-			{route === 'success' && <PortalSuccess onDone={() => go('home')} />}
+					<div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+						<input
+							type="tel"
+							inputMode="tel"
+							autoComplete="tel"
+							placeholder="2567XXXXXXXX"
+							value={phone}
+							onChange={(e) => setPhone(e.target.value)}
+							className="w-full bg-transparent text-[13px] font-semibold text-white placeholder:text-white/35 outline-none"
+						/>
+					</div>
+				</div>
+
+				<div className="mt-5 space-y-3">
+					{bundles.map((b) => (
+						<div
+							key={b.id}
+							className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+						>
+							<div>
+								<div className="text-[13px] font-extrabold text-white">{b.label}</div>
+								<div className="text-[11px] font-extrabold text-emerald-300">{b.price}</div>
+							</div>
+							<button
+								type="button"
+								onClick={() => {}}
+								className="cursor-pointer rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-emerald-500"
+							>
+								BUY NOW
+							</button>
+						</div>
+					))}
+				</div>
+
+				<div className="mt-6 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+					<div>
+						<div className="text-[12px] font-extrabold text-white">Need Help?</div>
+						<div className="text-[12px] font-semibold text-white/70">Call: 0707434218</div>
+					</div>
+					<button
+						type="button"
+						onClick={() => {}}
+						className="cursor-pointer rounded-lg bg-sky-500 px-4 py-2 text-[11px] font-extrabold tracking-wide text-white transition hover:bg-sky-400"
+					>
+						CALL
+					</button>
+				</div>
+			</div>
 		</PortalLayout>
 	);
 }

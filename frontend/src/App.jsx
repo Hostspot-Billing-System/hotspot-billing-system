@@ -8,6 +8,7 @@ import AdminWithdraw from './pages/AdminWithdraw';
 import AdminVoucherUpload from './pages/AdminVoucherUpload';
 import AdminVouchers from './pages/AdminVouchers';
 import BatchHistory from './pages/BatchHistory';
+import PortalHome from './portal/PortalHome.jsx';
 
 function getPath() {
   if (typeof window === 'undefined') return '/';
@@ -45,6 +46,11 @@ export default function App() {
   );
 
   const content = useMemo(() => {
+    // Captive portal UI (public)
+    if (path === '/portal' || path?.startsWith('/portal/')) {
+      return <PortalHome />;
+    }
+
     if (path === '/admin' || path === '/admin/dashboard') return <AdminDashboard />;
     if (path === '/admin/bundles') return <AdminBundles />;
     if (path === '/admin/transactions') return <AdminTransactions />;
@@ -60,6 +66,11 @@ export default function App() {
     // Keep current behavior if someone visits '/' directly
     return <AdminVoucherUpload />;
   }, [path]);
+
+  // Render portal without admin chrome.
+  if (path === '/portal' || path?.startsWith('/portal/')) {
+    return content;
+  }
 
   return (
     <AdminLayout
