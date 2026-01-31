@@ -6,6 +6,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:smoke:transactions": "node --test tests/transactions.smoke.test.js",
+    "test:runtime": "node --test tests/runtimeHotspot.mock.test.js",
+    "test:mikrotik:profiles": "node --test tests/mikrotikProfilesService.test.js",
+    "test:mikrotik:sessions": "node --test tests/mikrotikSessionsService.test.js",
+    "test:mikrotik:disconnect": "node --test tests/mikrotikDisconnect.mock.test.js",
+    "test:mikrotik:status": "node --test tests/mikrotikStatusService.test.js",
     "db:apply:transactions": "node scripts/applyTransactionsMigrations.js",
     "db:apply:withdrawals": "node scripts/applyWithdrawalsMigrations.js",
     "start": "node server.js",
@@ -23,6 +28,8 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
+    "node-cron": "^3.0.3",
+    "node-routeros": "^1.6.8",
     "pg": "^8.17.2",
     "routeros-client": "^1.1.1"
   },

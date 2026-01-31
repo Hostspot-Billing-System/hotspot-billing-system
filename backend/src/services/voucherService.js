@@ -1,4 +1,6 @@
 import { pool } from '../config/db.js';
+import { provisionVoucherOnMikroTik, MikroTikProvisioningError } from './mikrotikProvisioningService.js';
+import { MikroTikClientError } from '../integrations/mikrotik/mikrotikClient.js';
 
 class DomainError extends Error {
   constructor(code, message, httpStatus) {
@@ -166,6 +168,15 @@ export class VoucherService {
         ipAddress,
       });
 
+      // Phase F: MikroTik is the source of truth for access.
+      // If MikroTik provisioning fails, we rollback the voucher redemption.
+      await provisionVoucherOnMikroTik({
+        voucherCode: voucher.code,
+        bundleId: voucher.package_id,
+        durationMinutes: voucher.duration_minutes,
+        profileName: `hotspot_${voucher.package_id}`,
+      });
+
       await client.query('COMMIT');
 
       return {
@@ -200,6 +211,16 @@ export function toHttpError(err) {
       body: {
         success: false,
         error: { code: err.code, message: err.message },
+      },
+    };
+  }
+
+  if (err instanceof MikroTikClientError || err instanceof MikroTikProvisioningError) {
+    return {
+      httpStatus: err.httpStatus ?? 502,
+      body: {
+        success: false,
+        error: { code: err.code ?? 'MIKROTIK_ERROR', message: err.message ?? 'MikroTik error' },
       },
     };
   }

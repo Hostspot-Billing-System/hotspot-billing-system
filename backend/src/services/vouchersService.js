@@ -1,4 +1,6 @@
 import { pool, query } from '../config/db.js';
+import { provisionVoucherOnMikroTik, MikroTikProvisioningError } from './mikrotikProvisioningService.js';
+import { MikroTikClientError } from '../integrations/mikrotik/mikrotikClient.js';
 
 const ALLOWED_STATUS = new Set(['available', 'used', 'expired']);
 
@@ -132,7 +134,9 @@ export class VouchersService {
           v.status,
           v.expires_at,
           (v.expires_at IS NOT NULL AND v.expires_at < NOW()) AS is_expired,
-          p.name AS package_name
+          v.package_id,
+          p.name AS package_name,
+          p.duration_minutes
         FROM vouchers v
         JOIN packages p ON p.id = v.package_id
         WHERE v.code = $1
@@ -170,6 +174,14 @@ export class VouchersService {
         // Became unavailable/expired due to a concurrent update or time passing.
         throw new DomainError('VOUCHER_EXPIRED', 'Voucher cannot be redeemed', 409);
       }
+
+      // Phase F: provision MikroTik hotspot user; rollback if it fails.
+      await provisionVoucherOnMikroTik({
+        voucherCode: voucher.code,
+        bundleId: voucher.package_id,
+        durationMinutes: voucher.duration_minutes,
+        profileName: `hotspot_${voucher.package_id}`,
+      });
 
       await client.query('COMMIT');
 
@@ -328,6 +340,16 @@ export function toHttpError(err) {
       body: {
         success: false,
         error: { code: err.code, message: err.message },
+      },
+    };
+  }
+
+  if (err instanceof MikroTikClientError || err instanceof MikroTikProvisioningError) {
+    return {
+      httpStatus: err.httpStatus ?? 502,
+      body: {
+        success: false,
+        error: { code: err.code ?? 'MIKROTIK_ERROR', message: err.message ?? 'MikroTik error' },
       },
     };
   }

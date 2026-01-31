@@ -40,6 +40,8 @@ export const env = {
   PGDATABASE: process.env.PGDATABASE,
   PGSSL: process.env.PGSSL,
   // MikroTik (validated when used)
+  MT_MODE: (process.env.MT_MODE ?? 'real').toLowerCase(),
+  MIKROTIK_MOCK: String(process.env.MIKROTIK_MOCK ?? '').toLowerCase() === 'true',
   MT_HOST: process.env.MT_HOST,
   MT_USER: process.env.MT_USER,
   MT_PASS: process.env.MT_PASS,

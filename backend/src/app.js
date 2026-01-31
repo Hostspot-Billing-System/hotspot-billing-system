@@ -8,6 +8,8 @@ import voucherBatchesRoutes from "./routes/voucherBatchesRoutes.js";
 import transactionsRoutes from "./routes/transactionsRoutes.js";
 import withdrawalsRoutes from "./routes/withdrawalsRoutes.js";
 import adminRoutes from './routes/adminRoutes.js';
+import runtimeRoutes from './routes/runtimeRoutes.js';
+import mikrotikRoutes from './routes/mikrotikRoutes.js';
 
 const app = express();
 
@@ -42,5 +44,7 @@ app.use("/api/voucher-batches", voucherBatchesRoutes);
 app.use("/api/transactions", transactionsRoutes);
 app.use("/api/withdrawals", withdrawalsRoutes);
 app.use("/api/admin", adminRoutes);
+app.use('/api/runtime', runtimeRoutes);
+app.use('/api/mikrotik', mikrotikRoutes);
 
 export default app;
