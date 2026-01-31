@@ -221,7 +221,7 @@ export async function requestWithdrawal(req, res) {
             updated_at
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_otp', 'mobile_money', $7, NOW(), NOW(), NOW())
-          RETURNING id, verification_contact
+          RETURNING id, verification_contact, otp_expires_at
           `,
           [
             reference,
@@ -258,6 +258,7 @@ export async function requestWithdrawal(req, res) {
       data: {
         withdrawal_id: Number(created.id),
         verification_contact: created.verification_contact,
+        otp_expires_at: created.otp_expires_at ? new Date(created.otp_expires_at).toISOString() : otpExpiresAt.toISOString(),
       },
     });
   } catch (err) {

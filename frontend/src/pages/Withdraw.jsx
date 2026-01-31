@@ -1,3 +1,14 @@
+/*
+ * DEV-ONLY: Manual smoke test checklist
+ * 1. Enter amount < 500 → blocked
+ * 2. Enter valid amount → preview updates
+ * 3. Request withdrawal → OTP sent
+ * 4. Enter wrong OTP → error
+ * 5. Enter correct OTP → success
+ * 6. Balance updates
+ * 7. Withdrawal appears in history
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Divider, Paper, Stack, TextField, Typography } from '@mui/material';
 
@@ -26,6 +37,7 @@ export default function Withdraw() {
   const [withdrawalId, setWithdrawalId] = useState(null);
   const [otp, setOtp] = useState('');
   const [verificationContact, setVerificationContact] = useState('');
+  const [otpExpiresAt, setOtpExpiresAt] = useState(null);
   const [success, setSuccess] = useState('');
 
   const [balance, setBalance] = useState(0);
@@ -43,6 +55,13 @@ export default function Withdraw() {
     if (typeof previewData.allowed === 'boolean') return previewData.allowed;
     return true;
   }, [previewData]);
+
+  const otpExpired = useMemo(() => {
+    if (!otpExpiresAt) return false;
+    const t = new Date(otpExpiresAt).getTime();
+    if (Number.isNaN(t)) return false;
+    return Date.now() > t;
+  }, [otpExpiresAt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +123,8 @@ export default function Withdraw() {
     setError('');
     setSuccess('');
 
+    if (loading) return;
+
     const phone = String(payoutPhone ?? '').trim();
     if (!phone) {
       setError('Enter a payout phone number.');
@@ -112,6 +133,16 @@ export default function Withdraw() {
 
     if (parsedAmount == null || parsedAmount <= 0) {
       setError('Enter a valid amount.');
+      return;
+    }
+
+    if (parsedAmount < 500) {
+      setError('Minimum withdrawal amount is UGX 500.');
+      return;
+    }
+
+    if (parsedAmount > Number(balance ?? 0)) {
+      setError('Amount exceeds withdrawable balance.');
       return;
     }
 
@@ -127,9 +158,11 @@ export default function Withdraw() {
 
       const id = data?.withdrawal_id ?? data?.id ?? null;
       const contact = data?.verification_contact ?? data?.verificationContact ?? maskContact(phone);
+      const expiresAt = data?.otp_expires_at ?? null;
 
       setWithdrawalId(id);
       setVerificationContact(contact);
+      setOtpExpiresAt(expiresAt);
       setStep('otp');
       setSuccess(`OTP sent to ${contact}`);
     } catch (e) {
@@ -143,6 +176,13 @@ export default function Withdraw() {
   async function onVerifyOtp() {
     setError('');
     setSuccess('');
+
+    if (loading) return;
+
+    if (otpExpired) {
+      setError('OTP expired. Please request a new OTP.');
+      return;
+    }
 
     const id = Number(withdrawalId);
     const otpValue = String(otp ?? '').trim();
@@ -171,6 +211,7 @@ export default function Withdraw() {
       setWithdrawalId(null);
       setOtp('');
       setVerificationContact('');
+      setOtpExpiresAt(null);
 
       // Refresh balances and recent withdrawals
       setReloadKey((k) => k + 1);
@@ -182,6 +223,12 @@ export default function Withdraw() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (step !== 'otp') return;
+    if (!otpExpired) return;
+    setError((prev) => prev || 'OTP expired. Please request a new OTP.');
+  }, [step, otpExpired]);
 
   return (
     <Box sx={{ width: '100%', pt: 1, pb: 5 }}>
@@ -270,12 +317,23 @@ export default function Withdraw() {
               <Button
                 variant="contained"
                 onClick={onVerifyOtp}
-                disabled={loading || !/^\d{6}$/.test(String(otp ?? ''))}
+                disabled={loading || otpExpired || !/^\d{6}$/.test(String(otp ?? ''))}
               >
                 {loading ? 'Verifying…' : 'Verify OTP'}
               </Button>
 
-              <Button variant="outlined" onClick={() => setStep('form')} disabled={loading}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setStep('form');
+                  setOtp('');
+                  setWithdrawalId(null);
+                  setVerificationContact('');
+                  setOtpExpiresAt(null);
+                  setError('');
+                }}
+                disabled={loading}
+              >
                 Back
               </Button>
             </>

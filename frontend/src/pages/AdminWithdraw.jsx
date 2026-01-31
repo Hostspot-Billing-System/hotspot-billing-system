@@ -149,6 +149,7 @@ export default function AdminWithdraw() {
   const [withdrawalId, setWithdrawalId] = useState(null);
   const [otp, setOtp] = useState('');
   const [verificationContact, setVerificationContact] = useState('');
+  const [otpExpiresAt, setOtpExpiresAt] = useState(null);
 
   const [snack, setSnack] = useState({ open: false, severity: 'info', message: '' });
 
@@ -191,6 +192,19 @@ export default function AdminWithdraw() {
     if (typeof previewData.allowed === 'boolean') return previewData.allowed;
     return true;
   }, [previewData]);
+
+  const otpExpired = useMemo(() => {
+    if (!otpExpiresAt) return false;
+    const t = new Date(otpExpiresAt).getTime();
+    if (Number.isNaN(t)) return false;
+    return Date.now() > t;
+  }, [otpExpiresAt]);
+
+  const minAmountOk = useMemo(() => (parsedAmount != null ? parsedAmount >= 500 : false), [parsedAmount]);
+  const maxAmountOk = useMemo(() => {
+    if (parsedAmount == null) return false;
+    return parsedAmount <= Number(withdrawable ?? 0);
+  }, [parsedAmount, withdrawable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -287,6 +301,8 @@ export default function AdminWithdraw() {
   async function onRequestWithdraw() {
     setError('');
 
+    if (loading) return;
+
     const phone = String(payoutPhone ?? '').trim();
     if (!phone) {
       setError('Enter a payout phone number.');
@@ -294,6 +310,14 @@ export default function AdminWithdraw() {
     }
     if (parsedAmount == null || parsedAmount <= 0) {
       setError('Enter a valid amount.');
+      return;
+    }
+    if (parsedAmount < 500) {
+      setError('Minimum withdrawal amount is UGX 500.');
+      return;
+    }
+    if (parsedAmount > Number(withdrawable ?? 0)) {
+      setError('Amount exceeds withdrawable balance.');
       return;
     }
     if (!previewAllowed) {
@@ -308,9 +332,11 @@ export default function AdminWithdraw() {
 
       const id = data?.withdrawal_id ?? data?.id ?? null;
       const contact = data?.verification_contact ?? data?.verificationContact ?? '';
+      const expiresAt = data?.otp_expires_at ?? null;
 
       setWithdrawalId(id);
       setVerificationContact(contact);
+      setOtpExpiresAt(expiresAt);
       setStep('otp');
       setOtp('');
       showSnack('success', `OTP sent to ${contact || maskedPayoutPhone}`);
@@ -325,6 +351,13 @@ export default function AdminWithdraw() {
   async function onVerifyOtp() {
     setError('');
 
+    if (loading) return;
+
+    if (otpExpired) {
+      setError('OTP expired. Please request a new OTP.');
+      return;
+    }
+
     const id = Number(withdrawalId);
     const otpValue = String(otp ?? '').trim();
     if (!Number.isFinite(id) || id <= 0) {
@@ -333,6 +366,10 @@ export default function AdminWithdraw() {
     }
     if (!otpValue) {
       setError('Enter the OTP.');
+      return;
+    }
+    if (!/^\d{6}$/.test(otpValue)) {
+      setError('OTP must be 6 digits.');
       return;
     }
 
@@ -344,6 +381,7 @@ export default function AdminWithdraw() {
       setWithdrawalId(null);
       setOtp('');
       setVerificationContact('');
+      setOtpExpiresAt(null);
       setReloadKey((k) => k + 1);
     } catch (e) {
       setError(e?.message ?? 'Failed to verify OTP.');
@@ -351,6 +389,12 @@ export default function AdminWithdraw() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (step !== 'otp') return;
+    if (!otpExpired) return;
+    setError((prev) => prev || 'OTP expired. Please request a new OTP.');
+  }, [step, otpExpired]);
 
   return (
     <Box sx={{ width: '100%', pt: 1, pb: 5, px: 0 }}>
@@ -582,7 +626,7 @@ export default function AdminWithdraw() {
                   <Button
                     variant="contained"
                     fullWidth
-                    disabled={loading || !previewAllowed}
+                    disabled={loading || !minAmountOk || !maxAmountOk || !previewAllowed}
                     onClick={onRequestWithdraw}
                     sx={{
                       mt: 1,
@@ -614,7 +658,7 @@ export default function AdminWithdraw() {
                   <Button
                     variant="contained"
                     fullWidth
-                    disabled={loading}
+                    disabled={loading || otpExpired || !/^\d{6}$/.test(String(otp ?? ''))}
                     onClick={onVerifyOtp}
                     sx={{
                       mt: 1,
@@ -638,6 +682,7 @@ export default function AdminWithdraw() {
                       setOtp('');
                       setWithdrawalId(null);
                       setVerificationContact('');
+                      setOtpExpiresAt(null);
                       setError('');
                     }}
                     sx={{ textTransform: 'none', borderRadius: 1 }}
