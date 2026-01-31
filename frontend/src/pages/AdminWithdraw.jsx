@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -7,6 +7,7 @@ import {
   CardContent,
   Chip,
   Divider,
+  MenuItem,
   Paper,
   Snackbar,
   Stack,
@@ -19,6 +20,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+
+import {
+  fetchWithdrawals,
+  getWithdrawableBalance,
+  getWithdrawableSummary,
+  previewWithdrawal,
+  requestWithdrawal,
+  verifyWithdrawal,
+} from '../api/withdrawals';
+import WithdrawalDetailsModal from '../components/WithdrawalDetailsModal';
 
 function Icon({ path, size = 18, color = 'currentColor' }) {
   return (
@@ -90,8 +101,9 @@ function formatTimeOnly(value) {
 
 function StatusPill({ status }) {
   const s = String(status ?? '').toLowerCase();
-  const isCompleted = s === 'completed' || s === 'success' || s === 'paid';
-  const isPending = s === 'pending' || s === 'processing';
+  const isCompleted = s === 'completed';
+  const isPending = s === 'pending' || s === 'processing' || s === 'approved';
+  const isRejected = s === 'rejected';
 
   return (
     <Chip
@@ -102,7 +114,7 @@ function StatusPill({ status }) {
         fontWeight: 900,
         fontSize: 11,
         borderRadius: 999,
-        bgcolor: isCompleted ? '#15803d' : isPending ? '#f59e0b' : '#64748b',
+        bgcolor: isCompleted ? '#15803d' : isPending ? '#f59e0b' : isRejected ? '#ef4444' : '#64748b',
         color: 'common.white',
         '& .MuiChip-label': { px: 1, py: 0 },
       }}
@@ -111,95 +123,232 @@ function StatusPill({ status }) {
 }
 
 const WITHDRAWAL_CHARGES = [
-  { range: '500 - 60,000', fee: 600 },
-  { range: '60,001 - 500,000', fee: 1200 },
-  { range: '500,001 - 1,000,000', fee: 2000 },
-  { range: '1,000,001 - 5,000,000', fee: 2400 },
+  { range: '500–60,000', fee: 600 },
+  { range: '60,001–500,000', fee: 1200 },
+  { range: '500,001–1,000,000', fee: 2000 },
+  { range: '1,000,001–5,000,000', fee: 2400 },
 ];
 
-const PLACEHOLDER_WITHDRAWALS = [
-  { id: 1, created_at: '2026-01-30T21:41:00.000Z', amount: 9574.47, number: '0791162099', status: 'Completed' },
-  { id: 2, created_at: '2026-01-28T11:31:00.000Z', amount: 228148.94, number: '0791162099', status: 'Completed' },
-  { id: 3, created_at: '2025-12-24T20:34:00.000Z', amount: 7446.81, number: '0789193523', status: 'Completed' },
-  { id: 4, created_at: '2025-12-20T14:30:00.000Z', amount: 101489.36, number: '0789193523', status: 'Completed' },
-  { id: 5, created_at: '2025-12-06T13:49:00.000Z', amount: 4787.23, number: '0750629696', status: 'Completed' },
-  { id: 6, created_at: '2025-12-06T13:44:00.000Z', amount: 2127.66, number: '0750629696', status: 'Completed' },
-  { id: 7, created_at: '2025-11-28T21:05:00.000Z', amount: 49840.43, number: '0707434218', status: 'Completed' },
-  { id: 8, created_at: '2025-11-26T20:21:00.000Z', amount: 17659.57, number: '0707434218', status: 'Completed' },
-  { id: 9, created_at: '2025-11-17T17:58:00.000Z', amount: 4010.64, number: '0707434218', status: 'Completed' },
-  { id: 10, created_at: '2025-11-17T09:23:00.000Z', amount: 16595.74, number: '0707434218', status: 'Completed' },
-];
-
-function normalizePhoneNumber(value) {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  if (!digits) return '';
-
-  // Accept formats like 2567XXXXXXXX or 07XXXXXXXX
-  if (digits.startsWith('256') && digits.length >= 12) return digits.slice(0, 12);
-  if (digits.startsWith('0') && digits.length >= 10) return digits.slice(0, 10);
-  if (digits.startsWith('7') && digits.length >= 9) return `0${digits.slice(0, 9)}`;
-
-  return digits;
+function maskAccount(value) {
+  const s = String(value ?? '').trim();
+  if (!s) return '********';
+  const keep = 4;
+  const last = s.slice(-keep);
+  return `******${last}`;
 }
 
 export default function AdminWithdraw() {
-  // Placeholder balances until we wire a real API.
-  const totalEarnings = 20925.53;
   const commissionRate = 0.06;
-  const commission = 1255.53;
-  const withdrawable = 19670.0;
 
   const [amount, setAmount] = useState('');
-  const [phone, setPhone] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [payoutPhone, setPayoutPhone] = useState('');
+  const [previewData, setPreviewData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [step, setStep] = useState('form');
+  const [withdrawalId, setWithdrawalId] = useState(null);
+  const [otp, setOtp] = useState('');
+  const [verificationContact, setVerificationContact] = useState('');
+
   const [snack, setSnack] = useState({ open: false, severity: 'info', message: '' });
 
-  const normalizedPhone = useMemo(() => normalizePhoneNumber(phone), [phone]);
-  const maskedPhone = useMemo(() => {
-    const p = normalizedPhone;
-    if (!p) return '********';
-    const keep = 4;
-    const last = p.slice(-keep);
-    return `******${last}`;
-  }, [normalizedPhone]);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [commissionDeducted, setCommissionDeducted] = useState(0);
+  const [withdrawable, setWithdrawable] = useState(0);
+  const [balanceError, setBalanceError] = useState('');
+
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState('');
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
+  const [page, setPage] = useState(1);
+  const perPage = 10;
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+
+  const maskedPayoutPhone = useMemo(() => maskAccount(payoutPhone), [payoutPhone]);
+
+  const nonBlockingError = balanceError || listError;
+
+  const commission = commissionDeducted;
 
   function showSnack(severity, message) {
     setSnack({ open: true, severity, message });
   }
 
+  const parsedAmount = useMemo(() => {
+    const n = Number(String(amount ?? '').trim());
+    if (!Number.isFinite(n)) return null;
+    return n;
+  }, [amount]);
+
+  const previewAllowed = useMemo(() => {
+    if (!previewData) return true;
+    if (typeof previewData.allowed === 'boolean') return previewData.allowed;
+    return true;
+  }, [previewData]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setError('');
+
+      if (parsedAmount == null || parsedAmount <= 0) {
+        setPreviewData(null);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await previewWithdrawal(parsedAmount);
+        const data = res?.data ?? res;
+        if (!cancelled) setPreviewData(data ?? null);
+      } catch (e) {
+        if (!cancelled) {
+          setPreviewData(null);
+          setError(e?.message ?? 'Failed to preview withdrawal');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [parsedAmount]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setBalanceLoading(true);
+      setBalanceError('');
+      try {
+        const summary = await getWithdrawableSummary();
+        if (!cancelled) {
+          setTotalEarnings(Number(summary?.total_earnings_ugx ?? 0));
+          setCommissionDeducted(Number(summary?.commission_deducted_ugx ?? 0));
+          setWithdrawable(Number(summary?.withdrawable_amount_ugx ?? 0));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setTotalEarnings(0);
+          setCommissionDeducted(0);
+          setWithdrawable(0);
+          setBalanceError(e?.response?.data?.error?.message ?? e?.message ?? 'Failed to load withdrawable balance');
+        }
+      } finally {
+        if (!cancelled) setBalanceLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setListLoading(true);
+      setListError('');
+      try {
+        const result = await fetchWithdrawals({ page, perPage });
+        const list = Array.isArray(result?.data) ? result.data : [];
+        if (!cancelled) {
+          setRows(list);
+          setTotal(Number(result?.meta?.total ?? 0));
+          setPageCount(Math.max(1, Number(result?.meta?.totalPages ?? 1)));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setRows([]);
+          setTotal(0);
+          setPageCount(1);
+          setListError(e?.response?.data?.error?.message ?? e?.message ?? 'Failed to load withdrawals');
+        }
+      } finally {
+        if (!cancelled) setListLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, perPage, reloadKey]);
+
   async function onRequestWithdraw() {
-    const amountN = Number(String(amount).replace(/,/g, ''));
+    setError('');
 
-    if (!Number.isFinite(amountN) || amountN <= 0) {
-      showSnack('error', 'Enter a valid withdrawal amount.');
+    const phone = String(payoutPhone ?? '').trim();
+    if (!phone) {
+      setError('Enter a payout phone number.');
+      return;
+    }
+    if (parsedAmount == null || parsedAmount <= 0) {
+      setError('Enter a valid amount.');
+      return;
+    }
+    if (!previewAllowed) {
+      setError('Withdrawal not allowed for this amount/balance.');
       return;
     }
 
-    if (amountN < 500) {
-      showSnack('error', 'Minimum withdrawal amount is UGX 500.');
-      return;
-    }
-
-    if (amountN > withdrawable) {
-      showSnack('error', `Amount exceeds withdrawable balance (UGX ${formatMoney(withdrawable)}).`);
-      return;
-    }
-
-    if (!normalizedPhone || (normalizedPhone.length !== 10 && normalizedPhone.length !== 12)) {
-      showSnack('error', 'Enter a valid mobile money number (07XXXXXXXX or 2567XXXXXXXX).');
-      return;
-    }
-
-    setSubmitting(true);
+    setLoading(true);
     try {
-      // TODO: wire to backend (withdraw endpoint + OTP verification flow)
-      await new Promise((r) => setTimeout(r, 750));
-      showSnack('success', 'Withdrawal request submitted (placeholder).');
-      setAmount('');
-    } catch {
-      showSnack('error', 'Failed to submit withdrawal request.');
+      const res = await requestWithdrawal({ amount: parsedAmount, payout_phone: phone });
+      const data = res?.data ?? res;
+
+      const id = data?.withdrawal_id ?? data?.id ?? null;
+      const contact = data?.verification_contact ?? data?.verificationContact ?? '';
+
+      setWithdrawalId(id);
+      setVerificationContact(contact);
+      setStep('otp');
+      setOtp('');
+      showSnack('success', `OTP sent to ${contact || maskedPayoutPhone}`);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(e?.message ?? 'Failed to submit withdrawal request.');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
+    }
+  }
+
+  async function onVerifyOtp() {
+    setError('');
+
+    const id = Number(withdrawalId);
+    const otpValue = String(otp ?? '').trim();
+    if (!Number.isFinite(id) || id <= 0) {
+      setError('Missing withdrawal reference.');
+      return;
+    }
+    if (!otpValue) {
+      setError('Enter the OTP.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await verifyWithdrawal({ withdrawal_id: id, otp: otpValue });
+      showSnack('success', 'Withdrawal verified successfully.');
+      setStep('form');
+      setWithdrawalId(null);
+      setOtp('');
+      setVerificationContact('');
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(e?.message ?? 'Failed to verify OTP.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -208,6 +357,12 @@ export default function AdminWithdraw() {
       <Typography variant="h4" fontWeight={900}>
         Withdraw Earnings
       </Typography>
+
+      {nonBlockingError ? (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {nonBlockingError}
+        </Alert>
+      ) : null}
 
       <Box
         sx={{
@@ -219,19 +374,19 @@ export default function AdminWithdraw() {
       >
         <StatCard
           title="Total Earnings"
-          value={formatMoney(totalEarnings)}
+          value={balanceLoading ? 'Loading…' : formatMoney(totalEarnings)}
           subtitle="After subtracting pending and completed withdrawals"
           color="#3b82f6"
         />
         <StatCard
           title="Our Commission"
-          value={formatMoney(commission)}
+          value={balanceLoading ? 'Loading…' : formatMoney(commission)}
           subtitle={`At ${(commissionRate * 100).toFixed(2)}% rate`}
           color="#22c55e"
         />
         <StatCard
           title="Withdrawable Account"
-          value={formatMoney(withdrawable)}
+          value={balanceLoading ? 'Loading…' : formatMoney(withdrawable)}
           subtitle="Available to request now"
           color="#7c3aed"
         />
@@ -258,7 +413,7 @@ export default function AdminWithdraw() {
                   Initial Amount
                 </Typography>
                 <Typography variant="h6" fontWeight={900} sx={{ mt: 0.5 }}>
-                  UGX {formatMoney(totalEarnings)}
+                  UGX {balanceLoading ? 'Loading…' : formatMoney(totalEarnings)}
                 </Typography>
               </Box>
 
@@ -269,7 +424,7 @@ export default function AdminWithdraw() {
                 <Stack direction="row" sx={{ mt: 0.75 }} alignItems="center" justifyContent="space-between">
                   <Typography variant="body2">Commission ({(commissionRate * 100).toFixed(2)}%):</Typography>
                   <Typography variant="body2" sx={{ color: '#ef4444', fontWeight: 900 }}>
-                    UGX {formatMoney(commission)}
+                    UGX {balanceLoading ? 'Loading…' : formatMoney(commission)}
                   </Typography>
                 </Stack>
               </Box>
@@ -281,7 +436,7 @@ export default function AdminWithdraw() {
                   Final Balance
                 </Typography>
                 <Typography variant="h5" fontWeight={900} sx={{ mt: 0.5 }}>
-                  UGX {formatMoney(withdrawable)}
+                  UGX {balanceLoading ? 'Loading…' : formatMoney(withdrawable)}
                 </Typography>
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                   Available for withdrawal after deducting commission on remaining balance
@@ -302,6 +457,8 @@ export default function AdminWithdraw() {
               <Typography variant="h6" fontWeight={900}>
                 Request Withdrawal
               </Typography>
+
+              {error ? <Alert severity="error">{error}</Alert> : null}
 
               <Paper
                 elevation={0}
@@ -325,7 +482,7 @@ export default function AdminWithdraw() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Amount (UGX)</TableCell>
-                        <TableCell>Price per Transaction (UGX)</TableCell>
+                        <TableCell>Fee (UGX)</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -341,6 +498,9 @@ export default function AdminWithdraw() {
 
                 <Box sx={{ p: 2 }}>
                   <Stack spacing={1}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                      Fee is applied once per successful withdrawal
+                    </Typography>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Icon path={ICONS.check} size={16} color="#0f766e" />
                       <Typography variant="body2">Minimum transaction amount is UGX 500.</Typography>
@@ -357,45 +517,135 @@ export default function AdminWithdraw() {
                 </Box>
               </Paper>
 
-              <TextField
-                label="Amount to Withdraw (UGX)"
-                size="small"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder=""
-                inputMode="numeric"
-              />
+              {step === 'form' ? (
+                <>
+                  <TextField
+                    label="Amount"
+                    size="small"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="e.g. 1000"
+                    helperText="Enter the amount you want to withdraw"
+                  />
 
-              <TextField
-                label="Mobile Money Number"
-                size="small"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="256772123456 or 0772123456"
-                helperText="Enter the mobile money number where you want to receive the money"
-              />
+                  <TextField
+                    label="Payout Phone"
+                    size="small"
+                    value={payoutPhone}
+                    onChange={(e) => setPayoutPhone(e.target.value)}
+                    placeholder="e.g. 2567xxxxxxxx"
+                    helperText="Enter the mobile money number where you want to receive the money"
+                  />
 
-              <Alert severity="info" icon={<Icon path={ICONS.info} size={18} color="#0284c7" />}>
-                For security, the verification OTP will be sent to your registered phone number: {maskedPhone}
-              </Alert>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      borderRadius: 1.5,
+                      border: '1px solid #e5e7eb',
+                      bgcolor: 'common.white',
+                      p: 2,
+                    }}
+                  >
+                    <Stack spacing={1}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
+                          Requested Amount
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                          UGX {formatMoney(previewData?.requested_amount ?? parsedAmount ?? 0, 0)}
+                        </Typography>
+                      </Stack>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
+                          Transaction Fee
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                          UGX {formatMoney(previewData?.withdrawal_fee ?? 0, 0)}
+                        </Typography>
+                      </Stack>
+                      <Divider sx={{ borderColor: '#eef2f7' }} />
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="body2" sx={{ color: '#15803d', fontWeight: 900 }}>
+                          Net Amount (You will receive)
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 900, color: '#15803d' }}>
+                          UGX {formatMoney(previewData?.net_amount ?? 0, 0)}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </Paper>
 
-              <Button
-                variant="contained"
-                fullWidth
-                disabled={submitting}
-                onClick={onRequestWithdraw}
-                sx={{
-                  mt: 1,
-                  textTransform: 'none',
-                  borderRadius: 1,
-                  fontWeight: 900,
-                  py: 1.2,
-                  bgcolor: '#2563eb',
-                  '&:hover': { bgcolor: '#1d4ed8' },
-                }}
-              >
-                {submitting ? 'Requesting…' : 'Request Withdrawal'}
-              </Button>
+                  <Alert severity="info" icon={<Icon path={ICONS.info} size={18} color="#0284c7" />}>
+                    For security, the verification OTP will be sent to your payout phone: {maskedPayoutPhone}
+                  </Alert>
+
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    disabled={loading || !previewAllowed}
+                    onClick={onRequestWithdraw}
+                    sx={{
+                      mt: 1,
+                      textTransform: 'none',
+                      borderRadius: 1,
+                      fontWeight: 900,
+                      py: 1.2,
+                      bgcolor: '#2563eb',
+                      '&:hover': { bgcolor: '#1d4ed8' },
+                    }}
+                  >
+                    {loading ? 'Requesting…' : 'Request Withdrawal'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Alert severity="info" icon={<Icon path={ICONS.info} size={18} color="#0284c7" />}>
+                    Enter the OTP sent to {verificationContact || maskedPayoutPhone}
+                  </Alert>
+
+                  <TextField
+                    label="OTP"
+                    size="small"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="6-digit OTP"
+                  />
+
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    disabled={loading}
+                    onClick={onVerifyOtp}
+                    sx={{
+                      mt: 1,
+                      textTransform: 'none',
+                      borderRadius: 1,
+                      fontWeight: 900,
+                      py: 1.2,
+                      bgcolor: '#2563eb',
+                      '&:hover': { bgcolor: '#1d4ed8' },
+                    }}
+                  >
+                    {loading ? 'Verifying…' : 'Verify OTP'}
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    disabled={loading}
+                    onClick={() => {
+                      setStep('form');
+                      setOtp('');
+                      setWithdrawalId(null);
+                      setVerificationContact('');
+                      setError('');
+                    }}
+                    sx={{ textTransform: 'none', borderRadius: 1 }}
+                  >
+                    Back
+                  </Button>
+                </>
+              )}
             </Stack>
           </Paper>
         </Stack>
@@ -411,35 +661,136 @@ export default function AdminWithdraw() {
             <Table size="small" sx={{ minWidth: 620, '& th': { fontWeight: 900, bgcolor: '#f8fafc' } }}>
               <TableHead>
                 <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Number</TableCell>
+                  <TableCell>Reference</TableCell>
+                  <TableCell>Total</TableCell>
+                  <TableCell>Net</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Requested</TableCell>
+                  <TableCell>Completed</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {PLACEHOLDER_WITHDRAWALS.map((w) => (
-                  <TableRow key={w.id} hover>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Box component="span" sx={{ display: 'block', fontWeight: 900 }}>
-                        {formatDateOnly(w.created_at)}
-                      </Box>
-                      <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>
-                        {formatTimeOnly(w.created_at)}
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>UGX {formatMoney(w.amount)}</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace' }}>{w.number}</TableCell>
-                    <TableCell>
-                      <StatusPill status={w.status} />
+                {listLoading ? (
+                  <TableRow hover>
+                    <TableCell colSpan={7} sx={{ py: 3 }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                        Loading withdrawals…
+                      </Typography>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : listError ? (
+                  <TableRow hover>
+                    <TableCell colSpan={7} sx={{ py: 3 }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                        {listError}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : rows.length === 0 ? (
+                  <TableRow hover>
+                    <TableCell colSpan={7} sx={{ py: 3 }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                        No withdrawals yet
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((w) => (
+                    <TableRow key={w.id} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 900 }}>
+                        {w.reference}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 900 }}>UGX {formatMoney(w.total_amount)}</TableCell>
+                      <TableCell sx={{ fontWeight: 900 }}>UGX {formatMoney(w.net_amount)}</TableCell>
+                      <TableCell>
+                        <StatusPill status={w.status} />
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        <Box component="span" sx={{ display: 'block', fontWeight: 900 }}>
+                          {formatDateOnly(w.requested_at)}
+                        </Box>
+                        <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>
+                          {formatTimeOnly(w.requested_at)}
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        {w.completed_at ? (
+                          <>
+                            <Box component="span" sx={{ display: 'block', fontWeight: 900 }}>
+                              {formatDateOnly(w.completed_at)}
+                            </Box>
+                            <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>
+                              {formatTimeOnly(w.completed_at)}
+                            </Box>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            setSelectedId(w.id);
+                            setDetailsOpen(true);
+                          }}
+                          sx={{ textTransform: 'none', borderRadius: 1 }}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </TableContainer>
+
+          {total > 0 && !listLoading && !listError ? (
+            <>
+              <Divider sx={{ borderColor: '#eef2f7' }} />
+
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                  Page {page} of {pageCount}
+                </Typography>
+
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    sx={{ textTransform: 'none', borderRadius: 1 }}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={page >= pageCount}
+                    onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                    sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' } }}
+                  >
+                    Next
+                  </Button>
+                </Stack>
+              </Box>
+            </>
+          ) : null}
         </Paper>
       </Box>
+
+      <WithdrawalDetailsModal
+        open={detailsOpen}
+        withdrawalId={selectedId}
+        onClose={() => {
+          setDetailsOpen(false);
+          setSelectedId(null);
+        }}
+      />
 
       <Snackbar
         open={snack.open}
@@ -459,3 +810,4 @@ export default function AdminWithdraw() {
     </Box>
   );
 }
+
