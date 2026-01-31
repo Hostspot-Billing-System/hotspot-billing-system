@@ -55,6 +55,7 @@ export async function createTransaction(req, res) {
       customer_phone,
       amount_ugx,
       payment_method,
+      client_id: body.client_id ?? body.owner_id,
     });
 
     return res.status(201).json({

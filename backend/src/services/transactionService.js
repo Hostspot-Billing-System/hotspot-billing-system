@@ -27,6 +27,43 @@ function parseRequiredPositiveBigint(value, fieldName) {
   return Math.floor(num);
 }
 
+function parseOptionalPositiveBigint(value, fieldName) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+
+  const num = Number(trimmed);
+  if (!Number.isFinite(num) || num <= 0) {
+    throw new DomainError('BAD_REQUEST', `${fieldName} must be a valid number`, 400);
+  }
+
+  return Math.floor(num);
+}
+
+async function lockOwnerLedgerAndGetBalance(client, ownerId) {
+  // Serialize ledger writes per owner even if there are no ledger rows yet.
+  await client.query('SELECT pg_advisory_xact_lock($1::bigint) AS locked', [ownerId]);
+
+  const result = await client.query(
+    `
+    SELECT
+      COALESCE(le.balance_after, 0)::numeric(14,2) AS balance
+    FROM (SELECT 1) x
+    LEFT JOIN LATERAL (
+      SELECT balance_after
+      FROM ledger_entries
+      WHERE owner_id = $1
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+      FOR UPDATE
+    ) le ON true
+    `,
+    [ownerId]
+  );
+
+  const row = result.rows?.[0] ?? null;
+  return { balance: row?.balance == null ? '0.00' : String(row.balance) };
+}
+
 function parseRequiredMoney(value, fieldName) {
   if (value == null) {
     throw new DomainError('BAD_REQUEST', `${fieldName} is required`, 400);
@@ -141,12 +178,13 @@ export class TransactionService {
     return row;
   }
 
-  static async createTransaction({ voucher_code, bundle_id, customer_phone, amount_ugx, payment_method }) {
+  static async createTransaction({ voucher_code, bundle_id, customer_phone, amount_ugx, payment_method, client_id } = {}) {
     const voucherCode = normalizeText(voucher_code);
     const bundleId = parseRequiredPositiveBigint(bundle_id, 'bundle_id');
     const customerPhone = normalizeText(customer_phone);
     const paymentMethod = normalizeText(payment_method);
     const amountUgx = parseRequiredMoney(amount_ugx, 'amount_ugx');
+    const ownerId = parseOptionalPositiveBigint(client_id, 'client_id');
 
     const client = await pool.connect();
     try {
@@ -211,7 +249,9 @@ export class TransactionService {
               amount_ugx,
               commission_ugx,
               status,
-              payment_method
+              payment_method,
+              client_id,
+              paid_at
             )
             VALUES (
               $1,
@@ -221,7 +261,9 @@ export class TransactionService {
               $5::numeric(12,2),
               ROUND(($5::numeric(12,2) * 0.06), 2),
               'completed',
-              $6
+              $6,
+              $7,
+              NOW()
             )
             RETURNING
               id,
@@ -235,7 +277,7 @@ export class TransactionService {
               payment_method,
               created_at
             `,
-            [reference, voucherCode, bundleId, customerPhone, amountUgx, paymentMethod]
+            [reference, voucherCode, bundleId, customerPhone, amountUgx, paymentMethod, ownerId]
           );
 
           transactionRow = insertRes.rows[0];
@@ -253,6 +295,41 @@ export class TransactionService {
 
       if (!transactionRow) {
         throw new DomainError('REFERENCE_GENERATION_FAILED', 'Failed to generate transaction reference', 500);
+      }
+
+      // Write ledger credit only when the transaction is recorded as 'completed'.
+      // This happens atomically within this same DB transaction.
+      if (ownerId) {
+        const { balance } = await lockOwnerLedgerAndGetBalance(client, ownerId);
+        const netRes = await client.query(
+          `
+          SELECT ($1::numeric(12,2) - ROUND(($1::numeric(12,2) * 0.06), 2))::numeric(14,2) AS net_credit
+          `,
+          [amountUgx]
+        );
+        const netCredit = String(netRes.rows?.[0]?.net_credit ?? '0.00');
+
+        await client.query(
+          `
+          INSERT INTO ledger_entries (
+            owner_id,
+            source_type,
+            source_id,
+            direction,
+            amount_ugx,
+            balance_after
+          )
+          VALUES (
+            $1,
+            'transaction',
+            $2,
+            'credit',
+            $3::numeric(14,2),
+            ($4::numeric(14,2) + $3::numeric(14,2))::numeric(14,2)
+          )
+          `,
+          [ownerId, transactionRow.id, netCredit, balance]
+        );
       }
 
       await client.query('COMMIT');

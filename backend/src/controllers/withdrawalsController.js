@@ -18,6 +18,35 @@ function parsePositiveInt(value, fieldName) {
   return { ok: true, value: Math.floor(n) };
 }
 
+async function lockOwnerLedgerAndGetBalance(client, ownerId) {
+  // Ensures no parallel withdrawal flows for the same owner_id even if there are no ledger rows yet.
+  await client.query('SELECT pg_advisory_xact_lock($1::bigint) AS locked', [ownerId]);
+
+  const result = await client.query(
+    `
+    SELECT
+      COALESCE(le.balance_after, 0)::numeric(14,2) AS balance,
+      le.id AS ledger_entry_id
+    FROM (SELECT 1) x
+    LEFT JOIN LATERAL (
+      SELECT id, balance_after
+      FROM ledger_entries
+      WHERE owner_id = $1
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+      FOR UPDATE
+    ) le ON true
+    `,
+    [ownerId]
+  );
+
+  const row = result.rows?.[0] ?? null;
+  return {
+    balance: row?.balance == null ? '0.00' : String(row.balance),
+    ledger_entry_id: row?.ledger_entry_id == null ? null : Number(row.ledger_entry_id),
+  };
+}
+
 function maskContact(value) {
   const s = String(value ?? '').trim();
   if (!s) return '********';
@@ -67,6 +96,38 @@ async function mockMobileMoneyPayout() {
 
 function toBadRequest(message) {
   return { success: false, error: { code: 'BAD_REQUEST', message } };
+}
+
+function toInvalidWithdrawalState(message) {
+  return { success: false, error: { code: 'INVALID_WITHDRAWAL_STATE', message } };
+}
+
+async function transitionWithdrawalStatus(client, { withdrawalId, fromStatuses, toStatus, setFailureReason, setCompletedAt }) {
+  const params = [withdrawalId];
+  const whereStatuses = (fromStatuses ?? []).map((s) => String(s));
+  params.push(whereStatuses);
+
+  const setClauses = [`status = '${String(toStatus)}'`, 'updated_at = NOW()'];
+  if (setFailureReason !== undefined) {
+    params.push(setFailureReason);
+    setClauses.push(`failure_reason = $${params.length}`);
+  }
+  if (setCompletedAt) {
+    setClauses.push('completed_at = NOW()');
+  }
+
+  const result = await client.query(
+    `
+    UPDATE withdrawals
+    SET ${setClauses.join(', ')}
+    WHERE id = $1
+      AND status = ANY($2::text[])
+    RETURNING status
+    `,
+    params
+  );
+
+  return { ok: (result.rowCount ?? 0) > 0 };
 }
 
 async function getAvailableBalanceForClient(clientId) {
@@ -135,6 +196,36 @@ export async function requestWithdrawal(req, res) {
   try {
     const body = req.body ?? {};
 
+    const idempotencyKey = normalizeText(req.get?.('Idempotency-Key') ?? req.headers?.['idempotency-key']);
+    if (idempotencyKey) {
+      const existingRes = await pool.query(
+        `
+        SELECT id, verification_contact, otp_expires_at
+        FROM withdrawals
+        WHERE idempotency_key = $1
+        LIMIT 1
+        `,
+        [idempotencyKey]
+      );
+      const existing = existingRes.rows?.[0] ?? null;
+      if (existing) {
+        // If the caller is using the legacy flow, return the full withdrawal contract.
+        if (body.payout_method != null || body.payout_account != null) {
+          const data = await WithdrawalsDbService.getWithdrawalById(existing.id);
+          return res.status(200).json({ success: true, data });
+        }
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            withdrawal_id: Number(existing.id),
+            verification_contact: existing.verification_contact ?? null,
+            otp_expires_at: existing.otp_expires_at ? new Date(existing.otp_expires_at).toISOString() : null,
+          },
+        });
+      }
+    }
+
     // Backward-compatible: if existing admin UI posts payout_method/payout_account
     // use the legacy DB-backed withdrawal aggregation flow.
     if (body.payout_method != null || body.payout_account != null) {
@@ -143,6 +234,7 @@ export async function requestWithdrawal(req, res) {
         payout_account: body.payout_account,
         agent_id: body.agent_id,
         client_id: body.client_id,
+        idempotency_key: idempotencyKey,
       });
 
       return res.status(201).json({
@@ -178,70 +270,122 @@ export async function requestWithdrawal(req, res) {
     const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
     const verificationContact = maskContact(payoutPhone);
 
-    const clientId = body.client_id == null ? null : Number(body.client_id);
-    if (body.client_id != null) {
-      const clientParsed = parsePositiveInt(body.client_id, 'client_id');
-      if (!clientParsed.ok) {
-        return res
-          .status(400)
-          .json({ success: false, error: { code: clientParsed.code, message: clientParsed.message } });
+    const ownerParsed = parsePositiveInt(body.owner_id ?? body.client_id, 'owner_id');
+    if (!ownerParsed.ok) {
+      return res
+        .status(400)
+        .json({ success: false, error: { code: ownerParsed.code, message: ownerParsed.message } });
+    }
+    const ownerId = ownerParsed.value;
+
+    const requiredAmount = (preview.requested_amount + preview.withdrawal_fee).toFixed(2);
+
+    const client = await pool.connect();
+    let created = null;
+    try {
+      await client.query('BEGIN');
+
+      // Prevent parallel withdrawals for the same owner.
+      const { balance } = await lockOwnerLedgerAndGetBalance(client, ownerId);
+
+      // Disallow starting a second withdrawal while another is active.
+      const activeRes = await client.query(
+        `
+        SELECT id
+        FROM withdrawals
+        WHERE client_id = $1
+          AND status IN ('otp_pending', 'pending_otp', 'processing')
+        LIMIT 1
+        FOR UPDATE
+        `,
+        [ownerId]
+      );
+      if ((activeRes.rows ?? []).length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          error: { code: 'WITHDRAWAL_IN_PROGRESS', message: 'A withdrawal is already in progress for this account' },
+        });
       }
 
-      const available = await getAvailableBalanceForClient(clientParsed.value);
-      if (available != null && preview.requested_amount > available) {
+      const balanceCheck = await client.query(
+        `
+        SELECT ($1::numeric(14,2) >= $2::numeric(14,2)) AS has_funds
+        `,
+        [balance, requiredAmount]
+      );
+      const hasFunds = Boolean(balanceCheck.rows?.[0]?.has_funds);
+      if (!hasFunds) {
+        await client.query('ROLLBACK');
         return res.status(409).json({
           success: false,
           error: { code: 'INSUFFICIENT_BALANCE', message: 'Insufficient balance for this withdrawal amount' },
         });
       }
-    }
 
-    let created = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const reference = generateReference();
-      try {
-        const result = await pool.query(
-          `
-          INSERT INTO withdrawals (
-            reference,
-            client_id,
-            total_amount,
-            commission_amount,
-            net_amount,
-            requested_amount,
-            payout_phone,
-            verification_contact,
-            otp_hash,
-            otp_expires_at,
-            status,
-            payout_method,
-            payout_account,
-            requested_at,
-            created_at,
-            updated_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_otp', 'mobile_money', $7, NOW(), NOW(), NOW())
-          RETURNING id, verification_contact, otp_expires_at
-          `,
-          [
-            reference,
-            clientId,
-            preview.requested_amount,
-            preview.commission_amount,
-            preview.net_amount,
-            preview.requested_amount,
-            payoutPhone,
-            verificationContact,
-            otpHash,
-            otpExpiresAt.toISOString(),
-          ]
-        );
-        created = result.rows?.[0] ?? null;
-        break;
-      } catch (e) {
-        if (e?.code === '23505') continue;
-        throw e;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const reference = generateReference();
+        try {
+          const result = await client.query(
+            `
+            INSERT INTO withdrawals (
+              reference,
+              client_id,
+              total_amount,
+              commission_amount,
+              net_amount,
+              requested_amount,
+              payout_phone,
+              verification_contact,
+              otp_hash,
+              otp_expires_at,
+              idempotency_key,
+              status,
+              payout_method,
+              payout_account,
+              requested_at,
+              created_at,
+              updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'otp_pending', 'mobile_money', $7, NOW(), NOW(), NOW())
+            RETURNING id, verification_contact, otp_expires_at
+            `,
+            [
+              reference,
+              ownerId,
+              preview.requested_amount,
+              preview.commission_amount,
+              preview.net_amount,
+              preview.requested_amount,
+              payoutPhone,
+              verificationContact,
+              otpHash,
+              otpExpiresAt.toISOString(),
+              idempotencyKey,
+            ]
+          );
+          created = result.rows?.[0] ?? null;
+          break;
+        } catch (e) {
+          if (e?.code === '23505') continue;
+          throw e;
+        }
       }
+
+      if (!created) {
+        throw new Error('Failed to generate withdrawal reference');
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      client.release();
     }
 
     if (!created) {
@@ -284,11 +428,49 @@ export async function verifyWithdrawal(req, res) {
       });
     }
 
+    const idempotencyKey = normalizeText(req.get?.('Idempotency-Key') ?? req.headers?.['idempotency-key']);
+
+    if (idempotencyKey) {
+      const existingRes = await client.query(
+        `
+        SELECT id, status
+        FROM withdrawals
+        WHERE idempotency_key = $1
+        LIMIT 1
+        `,
+        [idempotencyKey]
+      );
+      const existing = existingRes.rows?.[0] ?? null;
+      const existingId = existing?.id == null ? null : Number(existing.id);
+      const existingStatus = existing?.status == null ? null : String(existing.status);
+
+      // If the key is already associated to a different withdrawal, or the withdrawal is no longer pending,
+      // return the existing response and do not reprocess.
+      if (
+        existingId &&
+        (existingId !== idParsed.value || (existingStatus && existingStatus !== 'otp_pending' && existingStatus !== 'pending_otp'))
+      ) {
+        return res.status(200).json({
+          success: true,
+          data: { withdrawal_id: existingId, status: existingStatus ?? 'unknown' },
+        });
+      }
+    }
+
     await client.query('BEGIN');
 
     const wRes = await client.query(
       `
-      SELECT id, status, otp_hash, otp_expires_at
+      SELECT
+        id,
+        client_id,
+        status,
+        otp_hash,
+        otp_expires_at,
+        requested_amount,
+        idempotency_key,
+        COALESCE(otp_attempts, 0)::int AS otp_attempts,
+        otp_locked_until
       FROM withdrawals
       WHERE id = $1
       FOR UPDATE
@@ -305,26 +487,78 @@ export async function verifyWithdrawal(req, res) {
       });
     }
 
+    if (idempotencyKey) {
+      const storedKey = row.idempotency_key == null ? null : String(row.idempotency_key);
+
+      // If a key is already set, it must match.
+      if (storedKey && storedKey !== idempotencyKey) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency-Key does not match this withdrawal' },
+        });
+      }
+
+      // Attach the key if the withdrawal didn't already have one.
+      if (!storedKey) {
+        await client.query(
+          `
+          UPDATE withdrawals
+          SET idempotency_key = $2
+          WHERE id = $1
+          `,
+          [idParsed.value, idempotencyKey]
+        );
+      }
+    }
+
     const status = String(row.status ?? '');
-    if (status !== 'pending_otp') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({
-        success: false,
-        error: { code: 'INVALID_STATUS', message: `Withdrawal is not pending OTP (status: ${status})` },
+
+    {
+      const lockedUntil = row.otp_locked_until ? new Date(row.otp_locked_until) : null;
+      const isLocked = lockedUntil && !Number.isNaN(lockedUntil.getTime()) && lockedUntil.getTime() > Date.now();
+      const attempts = Number(row.otp_attempts ?? 0);
+
+      if (isLocked || attempts >= 5) {
+        // Safety: if attempts are already maxed but lock isn't set (older rows), enforce a lock.
+        if (!isLocked) {
+          await client.query(
+            `
+            UPDATE withdrawals
+            SET otp_locked_until = NOW() + interval '15 minutes',
+                updated_at = NOW()
+            WHERE id = $1
+            `,
+            [idParsed.value]
+          );
+        }
+        await client.query('COMMIT');
+        return res.status(429).json({
+          success: false,
+          error: { code: 'OTP_LOCKED', message: 'Too many OTP attempts. Try again later.' },
+        });
+      }
+    }
+
+    // Idempotency: if already terminal or in-flight, return the current state.
+    if (idempotencyKey && (status === 'processing' || status === 'completed' || status === 'failed')) {
+      await client.query('COMMIT');
+      return res.status(200).json({
+        success: true,
+        data: { withdrawal_id: idParsed.value, status },
       });
+    }
+
+    if (status !== 'otp_pending' && status !== 'pending_otp') {
+      await client.query('ROLLBACK');
+      return res
+        .status(409)
+        .json(toInvalidWithdrawalState(`Invalid state transition attempt: ${status} -> processing`));
     }
 
     const expires = row.otp_expires_at ? new Date(row.otp_expires_at) : null;
     if (!expires || Number.isNaN(expires.getTime()) || expires.getTime() <= Date.now()) {
-      await client.query(
-        `
-        UPDATE withdrawals
-        SET status = 'failed', failure_reason = 'OTP expired', updated_at = NOW()
-        WHERE id = $1
-        `,
-        [idParsed.value]
-      );
-      await client.query('COMMIT');
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         error: { code: 'OTP_EXPIRED', message: 'OTP has expired' },
@@ -332,40 +566,71 @@ export async function verifyWithdrawal(req, res) {
     }
 
     if (!verifyOtp({ otp, stored: row.otp_hash })) {
-      await client.query(
+      const attemptRes = await client.query(
         `
         UPDATE withdrawals
-        SET status = 'failed', failure_reason = 'Invalid OTP', updated_at = NOW()
+        SET
+          otp_attempts = COALESCE(otp_attempts, 0) + 1,
+          otp_locked_until = CASE
+            WHEN (COALESCE(otp_attempts, 0) + 1) >= 5 THEN NOW() + interval '15 minutes'
+            ELSE otp_locked_until
+          END,
+          updated_at = NOW()
         WHERE id = $1
+        RETURNING COALESCE(otp_attempts, 0)::int AS otp_attempts, otp_locked_until
         `,
         [idParsed.value]
       );
+
+      const attemptRow = attemptRes.rows?.[0] ?? null;
+      const attempts = Number(attemptRow?.otp_attempts ?? 0);
+      const lockedUntil = attemptRow?.otp_locked_until ? new Date(attemptRow.otp_locked_until) : null;
+      const isLocked = lockedUntil && !Number.isNaN(lockedUntil.getTime()) && lockedUntil.getTime() > Date.now();
+
       await client.query('COMMIT');
+
+      if (isLocked || attempts >= 5) {
+        return res.status(429).json({
+          success: false,
+          error: { code: 'OTP_LOCKED', message: 'Too many OTP attempts. Try again later.' },
+        });
+      }
+
       return res.status(400).json({
         success: false,
         error: { code: 'OTP_INVALID', message: 'Invalid OTP' },
       });
     }
 
-    await client.query(
-      `
-      UPDATE withdrawals
-      SET status = 'processing', failure_reason = NULL, updated_at = NOW()
-      WHERE id = $1
-      `,
-      [idParsed.value]
-    );
+    {
+      const transitioned = await transitionWithdrawalStatus(client, {
+        withdrawalId: idParsed.value,
+        fromStatuses: ['otp_pending', 'pending_otp'],
+        toStatus: 'processing',
+        setFailureReason: null,
+      });
+      if (!transitioned.ok) {
+        await client.query('ROLLBACK');
+        return res
+          .status(409)
+          .json(toInvalidWithdrawalState('Invalid state transition attempt: otp_pending -> processing'));
+      }
+    }
 
     const payout = await mockMobileMoneyPayout();
     if (!payout?.ok) {
-      await client.query(
-        `
-        UPDATE withdrawals
-        SET status = 'failed', failure_reason = $2, updated_at = NOW()
-        WHERE id = $1
-        `,
-        [idParsed.value, String(payout?.reason ?? 'Payout failed')]
-      );
+      const transitioned = await transitionWithdrawalStatus(client, {
+        withdrawalId: idParsed.value,
+        fromStatuses: ['processing'],
+        toStatus: 'failed',
+        setFailureReason: String(payout?.reason ?? 'Payout failed'),
+      });
+      if (!transitioned.ok) {
+        await client.query('ROLLBACK');
+        return res
+          .status(409)
+          .json(toInvalidWithdrawalState('Invalid state transition attempt: processing -> failed'));
+      }
       await client.query('COMMIT');
       return res.status(502).json({
         success: false,
@@ -373,14 +638,94 @@ export async function verifyWithdrawal(req, res) {
       });
     }
 
-    await client.query(
+    // Only write a ledger entry when the withdrawal becomes 'completed'.
+    // Insert ledger entry and update status atomically in this transaction.
+    const ownerId = Number(row.client_id);
+    if (!Number.isFinite(ownerId) || ownerId <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Withdrawal has no valid owner (client_id)' },
+      });
+    }
+
+    // Lock owner's ledger row and validate funds at the completion boundary.
+    const { balance } = await lockOwnerLedgerAndGetBalance(client, ownerId);
+    const requestedAmount = Number(row.requested_amount ?? 0);
+    const preview = calculateWithdrawal(requestedAmount);
+    const requiredAmount = (preview.requested_amount + preview.withdrawal_fee).toFixed(2);
+
+    const balanceCheck = await client.query(
       `
-      UPDATE withdrawals
-      SET status = 'completed', completed_at = NOW(), failure_reason = NULL, updated_at = NOW()
-      WHERE id = $1
+      SELECT ($1::numeric(14,2) >= $2::numeric(14,2)) AS has_funds
+      `,
+      [balance, requiredAmount]
+    );
+    const hasFunds = Boolean(balanceCheck.rows?.[0]?.has_funds);
+    if (!hasFunds) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        error: { code: 'INSUFFICIENT_BALANCE', message: 'Insufficient balance for this withdrawal' },
+      });
+    }
+
+    // Safety: avoid double-debit if verify is retried in edge cases.
+    const existingLedger = await client.query(
+      `
+      SELECT 1
+      FROM ledger_entries
+      WHERE source_type = 'withdrawal'
+        AND source_id = $1
+      LIMIT 1
       `,
       [idParsed.value]
     );
+    if ((existingLedger.rows ?? []).length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        error: { code: 'ALREADY_DEBITED', message: 'Withdrawal ledger debit already exists' },
+      });
+    }
+
+    await client.query(
+      `
+      INSERT INTO ledger_entries (
+        owner_id,
+        source_type,
+        source_id,
+        direction,
+        amount_ugx,
+        balance_after
+      )
+      VALUES (
+        $1,
+        'withdrawal',
+        $2,
+        'debit',
+        $3::numeric(14,2),
+        ($4::numeric(14,2) - $3::numeric(14,2))::numeric(14,2)
+      )
+      `,
+      [ownerId, idParsed.value, requiredAmount, balance]
+    );
+
+    {
+      const transitioned = await transitionWithdrawalStatus(client, {
+        withdrawalId: idParsed.value,
+        fromStatuses: ['processing'],
+        toStatus: 'completed',
+        setFailureReason: null,
+        setCompletedAt: true,
+      });
+      if (!transitioned.ok) {
+        await client.query('ROLLBACK');
+        return res
+          .status(409)
+          .json(toInvalidWithdrawalState('Invalid state transition attempt: processing -> completed'));
+      }
+    }
 
     await client.query('COMMIT');
 

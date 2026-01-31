@@ -140,10 +140,27 @@ export class WithdrawalsService {
     };
   }
 
-  static async requestWithdrawal({ payout_method, payout_account, agent_id, client_id } = {}) {
+  static async requestWithdrawal({ payout_method, payout_account, agent_id, client_id, idempotency_key } = {}) {
     const { method, account } = validatePayout({ payout_method, payout_account });
     const agentId = agent_id == null ? null : parsePositiveInt(agent_id, 'agent_id');
     const clientId = client_id == null ? null : parsePositiveInt(client_id, 'client_id');
+    const idempotencyKey = normalizeText(idempotency_key);
+
+    if (idempotencyKey) {
+      const existing = await query(
+        `
+        SELECT id
+        FROM withdrawals
+        WHERE idempotency_key = $1
+        LIMIT 1
+        `,
+        [idempotencyKey]
+      );
+      const row = existing.rows?.[0] ?? null;
+      if (row?.id != null) {
+        return WithdrawalsService.getWithdrawalById(row.id);
+      }
+    }
 
     const client = await pool.connect();
     try {
@@ -220,12 +237,13 @@ export class WithdrawalsService {
               total_amount,
               commission_amount,
               net_amount,
+              idempotency_key,
               status,
               payout_method,
               payout_account,
               requested_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, NOW())
             RETURNING
               id,
               reference,
@@ -237,7 +255,7 @@ export class WithdrawalsService {
               completed_at,
               created_at
             `,
-            [reference, agentId, clientId, totalAmount, commissionAmount, netAmount, method, account]
+            [reference, agentId, clientId, totalAmount, commissionAmount, netAmount, idempotencyKey, method, account]
           );
           created = wRes.rows[0];
           break;
