@@ -16,12 +16,20 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+// GET /api/admin/transactions
+// Supports filters: q, status, bundle_id, min_amount, max_amount, from_date, to_date, page, per_page
+
 export async function fetchTransactions(params = {}) {
   const response = await api.get('/api/transactions', { params });
   return {
     data: Array.isArray(response.data?.data) ? response.data.data : [],
     meta: response.data?.meta ?? { page: 1, perPage: 20, total: 0, totalPages: 0 },
   };
+}
+
+export async function fetchAdminTransactions(params = {}) {
+  const response = await api.get('/api/admin/transactions', { params });
+  return response.data;
 }
 
 export async function exportTransactionsCSV(params = {}) {

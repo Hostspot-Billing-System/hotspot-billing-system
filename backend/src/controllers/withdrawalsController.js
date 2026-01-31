@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { pool } from '../config/db.js';
 import { calculateWithdrawal } from '../services/withdrawalsService.js';
 import { WithdrawalsService as WithdrawalsDbService, toHttpError as toHttpErrorDb } from '../services/withdrawalsDbService.js';
+import { recordSmsSendError, recordSmsSendSuccess } from '../services/smsStatusService.js';
 
 function normalizeText(value) {
   const trimmed = String(value ?? '').trim();
@@ -87,7 +88,12 @@ function generateReference() {
 }
 
 async function sendOtpMock() {
-  return;
+  try {
+    // Hook for admin metrics. Replace with real provider send later.
+    recordSmsSendSuccess();
+  } catch {
+    recordSmsSendError();
+  }
 }
 
 async function mockMobileMoneyPayout() {

@@ -25,7 +25,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 
 import { getPackages } from '../services/packages';
-import { exportTransactionsCSV, fetchTransactions } from '../api/transactions';
+import { exportTransactionsCSV, fetchAdminTransactions } from '../api/transactions';
 import TransactionDetailsModal from '../components/TransactionDetailsModal';
 
 function Icon({ path, size = 18, color = 'currentColor' }) {
@@ -171,24 +171,27 @@ export default function AdminTransactions() {
 
       try {
         const params = {
+          q: searchQuery.trim() || undefined,
           status: status ? String(status).toLowerCase() : undefined,
-          bundle: bundle || undefined,
-          fromDate: fromDateQuery,
-          toDate: toDateQuery,
-          search: searchQuery.trim() || undefined,
+          bundle_id: bundle || undefined,
+          from_date: fromDateQuery,
+          to_date: toDateQuery,
+          min_amount: minAmount || undefined,
+          max_amount: maxAmount || undefined,
           page,
-          perPage,
-          minAmount: minAmount || undefined,
-          maxAmount: maxAmount || undefined,
+          per_page: perPage,
         };
 
-        const result = await fetchTransactions(params);
+        const result = await fetchAdminTransactions(params);
         const list = Array.isArray(result?.data) ? result.data : [];
 
         if (!cancelled) {
           setRows(list);
-          setTotal(Number(result?.meta?.total ?? 0));
-          setPageCount(Math.max(1, Number(result?.meta?.totalPages ?? 1)));
+          const totalCount = Number(result?.meta?.total ?? 0);
+          const effectivePerPage = Number(result?.meta?.per_page ?? perPage);
+          const computedPages = effectivePerPage > 0 ? Math.ceil(totalCount / effectivePerPage) : 1;
+          setTotal(totalCount);
+          setPageCount(Math.max(1, computedPages));
         }
       } catch (e) {
         if (!cancelled) {
@@ -347,7 +350,7 @@ export default function AdminTransactions() {
               >
                 <MenuItem value="">All Bundles</MenuItem>
                 {allBundles.map((b) => (
-                  <MenuItem key={String(b.id)} value={String(b.name ?? '')}>
+                  <MenuItem key={String(b.id)} value={String(b.id)}>
                     {b.name}
                   </MenuItem>
                 ))}
@@ -466,13 +469,14 @@ export default function AdminTransactions() {
 
             <Button
               variant="outlined"
-              disabled={exporting}
+              disabled={exporting || total === 0}
               onClick={async () => {
                 try {
                   setExporting(true);
+                  const selectedBundleName = allBundles.find((b) => String(b.id) === String(bundle))?.name ?? '';
                   const params = {
                     status: status ? String(status).toLowerCase() : undefined,
-                    bundle: bundle || undefined,
+                    bundle: selectedBundleName || undefined,
                     fromDate: fromDateQuery,
                     toDate: toDateQuery,
                     search: searchQuery.trim() || undefined,

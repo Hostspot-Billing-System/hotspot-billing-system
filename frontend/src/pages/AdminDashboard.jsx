@@ -6,6 +6,8 @@ import {
   CardContent,
   Chip,
   Paper,
+  Skeleton,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -15,6 +17,9 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+
+import { api } from '../services/api';
 
 const STAT_CARDS = [
   { key: 'todaysRevenue', title: "Today’s Revenue", color: '#3b82f6' },
@@ -78,6 +83,26 @@ function StatCard({ title, color }) {
   );
 }
 
+function StatCardValue({ loading, value }) {
+  if (loading) {
+    return <Skeleton variant="text" sx={{ bgcolor: 'rgba(255,255,255,0.35)' }} width="70%" />;
+  }
+  return value ?? '--';
+}
+
+function StatCardFooter({ loading, footer }) {
+  if (loading) {
+    return <Skeleton variant="text" sx={{ bgcolor: 'rgba(255,255,255,0.25)' }} width="55%" />;
+  }
+  return footer ?? '—';
+}
+
+function formatMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value ?? '0');
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function SectionHeader({ title, right }) {
   return (
     <Box
@@ -97,6 +122,73 @@ function SectionHeader({ title, right }) {
 }
 
 export default function AdminDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState(null);
+  const [snack, setSnack] = useState({ open: false, message: '', severity: 'error' });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const response = await api.get('/api/admin/dashboard/metrics');
+        const data = response?.data ?? null;
+        if (!cancelled) setMetrics(data);
+      } catch (e) {
+        const message =
+          e?.response?.data?.error?.message ??
+          e?.response?.data?.message ??
+          e?.message ??
+          'Failed to load dashboard metrics';
+        if (!cancelled) setSnack({ open: true, message, severity: 'error' });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statValues = useMemo(() => {
+    const todayRevenue = metrics?.today_revenue_ugx;
+    const voucherStock = metrics?.voucher_stock_available;
+    const totalWithdrawals = metrics?.total_withdrawals_ugx;
+    const failedToday = metrics?.failed_transactions_today;
+    const smsStatus = metrics?.sms_status;
+
+    return {
+      todaysRevenue: {
+        value: todayRevenue != null ? `UGX ${formatMoney(todayRevenue)}` : '--',
+        footer: 'Updated live',
+      },
+      voucherStock: {
+        value:
+          voucherStock != null && Number.isFinite(Number(voucherStock))
+            ? Number(voucherStock).toLocaleString()
+            : '--',
+        footer: 'Available vouchers',
+      },
+      totalWithdrawals: {
+        value: totalWithdrawals != null ? `UGX ${formatMoney(totalWithdrawals)}` : '--',
+        footer: 'All time',
+      },
+      failedToday: {
+        value:
+          failedToday != null && Number.isFinite(Number(failedToday))
+            ? Number(failedToday).toLocaleString()
+            : '--',
+        footer: 'Today only',
+      },
+      smsStatus: {
+        value: smsStatus === true ? 'OK' : smsStatus === false ? 'Down' : '--',
+        footer: 'Last 5 minutes',
+      },
+    };
+  }, [metrics]);
+
   return (
     <Stack spacing={3}>
       <Box>
@@ -131,7 +223,37 @@ export default function AdminDashboard() {
       >
         {STAT_CARDS.map((card) => (
           <Box key={card.key} sx={{ minHeight: 170 }}>
-            <StatCard title={card.title} color={card.color} />
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 2,
+                bgcolor: card.color,
+                color: 'common.white',
+                boxShadow: '0 10px 20px rgba(0,0,0,0.10)',
+              }}
+            >
+              <CardContent sx={{ height: '100%' }}>
+                <Stack spacing={1} sx={{ height: '100%' }}>
+                  <Typography
+                    variant="subtitle2"
+                    fontWeight={800}
+                    sx={{
+                      color: 'rgba(255,255,255,0.95)',
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    {card.title}
+                  </Typography>
+                  <Typography variant="h4" fontWeight={800}>
+                    <StatCardValue loading={loading} value={statValues?.[card.key]?.value} />
+                  </Typography>
+                  <Box sx={{ flexGrow: 1 }} />
+                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.85)' }}>
+                    <StatCardFooter loading={loading} footer={statValues?.[card.key]?.footer} />
+                  </Typography>
+                </Stack>
+              </CardContent>
+            </Card>
           </Box>
         ))}
       </Box>
@@ -213,6 +335,22 @@ export default function AdminDashboard() {
           </Table>
         </TableContainer>
       </Paper>
+
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={4000}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnack((s) => ({ ...s, open: false }))}
+          severity={snack.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snack.message}
+        </Alert>
+      </Snackbar>
     </Stack>
   );
 }
