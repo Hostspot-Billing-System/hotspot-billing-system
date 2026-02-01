@@ -20,11 +20,20 @@
   z-index: 1200;
 }
 
+.sidebarDrawer {
+  position: relative;
+  top: auto;
+  left: auto;
+  height: 100%;
+  width: 100%;
+}
+
 .brand {
   height: 64px;
   display: flex;
   align-items: center;
   padding: 0 18px;
+  gap: 12px;
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -37,9 +46,37 @@
 
 .nav {
   padding: 8px 0 14px;
+  flex: 1 1 auto;
   overflow: auto;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge legacy */
+}
+
+.closeButton {
+  margin-left: auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.closeButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid rgba(47, 125, 246, 0.9);
+  outline-offset: 2px;
+}
+
+.closeIcon {
+  display: grid;
+  place-items: center;
 }
 
 .nav::-webkit-scrollbar {

@@ -11,6 +11,8 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 import { fetchTransactionById } from '../services/transactions';
 
@@ -76,6 +78,8 @@ function Field({ label, value, mono = false, right = null }) {
 }
 
 export default function TransactionDetailsModal({ open, transactionId, onClose }) {
+  const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tx, setTx] = useState(null);
@@ -118,10 +122,10 @@ export default function TransactionDetailsModal({ open, transactionId, onClose }
   }, [open, transactionId]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isPhone}>
       <DialogTitle sx={{ fontWeight: 900 }}>{title}</DialogTitle>
       <Divider />
-      <DialogContent sx={{ pt: 2 }}>
+      <DialogContent sx={{ pt: 2, pb: 2 }}>
         {loading ? (
           <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
             Loading…
@@ -173,8 +177,13 @@ export default function TransactionDetailsModal({ open, transactionId, onClose }
         )}
       </DialogContent>
       <Divider />
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} variant="contained" sx={{ textTransform: 'none', borderRadius: 1, fontWeight: 900 }}>
+      <DialogActions sx={{ px: 3, py: 2, gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <Button
+          onClick={onClose}
+          variant="contained"
+          fullWidth={isPhone}
+          sx={{ textTransform: 'none', borderRadius: 1, fontWeight: 900, minHeight: 44 }}
+        >
           Close
         </Button>
       </DialogActions>

@@ -284,6 +284,7 @@ export default function AdminDashboard() {
                   textTransform: 'none',
                   fontWeight: 800,
                   py: 1.35,
+                  minHeight: 44,
                   borderRadius: 2,
                   bgcolor: action.color,
                   boxShadow: '0 6px 14px rgba(0,0,0,0.18)',
@@ -308,8 +309,8 @@ export default function AdminDashboard() {
           />
         </Stack>
 
-        <TableContainer>
-          <Table size="small" aria-label="recent transactions">
+        <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <Table size="small" aria-label="recent transactions" sx={{ minWidth: { xs: 720, md: 0 } }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 900 }}>Date</TableCell>

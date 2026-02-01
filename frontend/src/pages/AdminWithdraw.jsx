@@ -397,7 +397,7 @@ export default function AdminWithdraw() {
 
   return (
     <Box sx={{ width: '100%', pt: 1, pb: 5, px: 0 }}>
-      <Typography variant="h4" fontWeight={900}>
+      <Typography variant="h4" fontWeight={400}>
         Withdraw Earnings
       </Typography>
 
@@ -444,10 +444,10 @@ export default function AdminWithdraw() {
           alignItems: 'start',
         }}
       >
-        <Stack spacing={2}>
+        <Stack spacing={2} sx={{ minWidth: 0 }}>
           <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e5e7eb', bgcolor: 'common.white' }}>
-            <Stack spacing={2} sx={{ p: 3 }}>
-              <Typography variant="h6" fontWeight={900}>
+            <Stack spacing={2} sx={{ p: { xs: 2, sm: 3 } }}>
+              <Typography variant="h6" fontWeight={400}>
                 Balance Summary
               </Typography>
 
@@ -464,9 +464,16 @@ export default function AdminWithdraw() {
                 <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
                   Deductions
                 </Typography>
-                <Stack direction="row" sx={{ mt: 0.75 }} alignItems="center" justifyContent="space-between">
-                  <Typography variant="body2">Commission ({(commissionRate * 100).toFixed(2)}%):</Typography>
-                  <Typography variant="body2" sx={{ color: '#ef4444', fontWeight: 900 }}>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  sx={{ mt: 0.75, minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                  alignItems={{ xs: 'flex-start', sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                    Commission ({(commissionRate * 100).toFixed(2)}%):
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#ef4444', fontWeight: 900, minWidth: 0, overflowWrap: 'anywhere' }}>
                     UGX {balanceLoading ? 'Loading…' : formatMoney(commission)}
                   </Typography>
                 </Stack>
@@ -494,10 +501,13 @@ export default function AdminWithdraw() {
               borderRadius: 2,
               border: '1px solid #e5e7eb',
               bgcolor: 'common.white',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
             }}
           >
-            <Stack spacing={2} sx={{ p: 3 }}>
-              <Typography variant="h6" fontWeight={900}>
+            <Stack spacing={2} sx={{ p: { xs: 2, sm: 3 } }}>
+              <Typography variant="h6" fontWeight={400}>
                 Request Withdrawal
               </Typography>
 
@@ -509,7 +519,9 @@ export default function AdminWithdraw() {
                   borderRadius: 1.5,
                   border: '1px solid #bae6fd',
                   bgcolor: '#cffafe',
-                  overflow: 'hidden',
+                  width: '100%',
+                  maxWidth: '100%',
+                  minWidth: 0,
                 }}
               >
                 <Box sx={{ px: 2, py: 1.25 }}>
@@ -520,8 +532,16 @@ export default function AdminWithdraw() {
 
                 <Divider sx={{ borderColor: 'rgba(15,23,42,0.12)' }} />
 
-                <TableContainer>
-                  <Table size="small" sx={{ '& th': { fontWeight: 900, bgcolor: 'rgba(255,255,255,0.55)' } }}>
+                <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%', minWidth: 0 }}>
+                  <Table
+                    size="small"
+                    sx={{
+                      width: '100%',
+                      tableLayout: 'fixed',
+                      '& th': { fontWeight: 900, bgcolor: 'rgba(255,255,255,0.55)' },
+                      '& td': { overflowWrap: 'anywhere' },
+                    }}
+                  >
                     <TableHead>
                       <TableRow>
                         <TableCell>Amount (UGX)</TableCell>
@@ -541,20 +561,29 @@ export default function AdminWithdraw() {
 
                 <Box sx={{ p: 2 }}>
                   <Stack spacing={1}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ color: 'text.secondary', fontWeight: 700, whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+                    >
                       Fee is applied once per successful withdrawal
                     </Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0, width: '100%' }}>
                       <Icon path={ICONS.check} size={16} color="#0f766e" />
-                      <Typography variant="body2">Minimum transaction amount is UGX 500.</Typography>
+                      <Typography variant="body2" sx={{ minWidth: 0, flex: 1, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                        Minimum transaction amount is UGX 500.
+                      </Typography>
                     </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0, width: '100%' }}>
                       <Icon path={ICONS.check} size={16} color="#0f766e" />
-                      <Typography variant="body2">Mobile Money is both Airtel & MTN.</Typography>
+                      <Typography variant="body2" sx={{ minWidth: 0, flex: 1, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                        Mobile Money is both Airtel & MTN.
+                      </Typography>
                     </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0, width: '100%' }}>
                       <Icon path={ICONS.check} size={16} color="#0f766e" />
-                      <Typography variant="body2">You will only be charged for successful transactions.</Typography>
+                      <Typography variant="body2" sx={{ minWidth: 0, flex: 1, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                        You will only be charged for successful transactions.
+                      </Typography>
                     </Stack>
                   </Stack>
                 </Box>
@@ -569,6 +598,7 @@ export default function AdminWithdraw() {
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder="e.g. 1000"
                     helperText="Enter the amount you want to withdraw"
+                    fullWidth
                   />
 
                   <TextField
@@ -578,6 +608,7 @@ export default function AdminWithdraw() {
                     onChange={(e) => setPayoutPhone(e.target.value)}
                     placeholder="e.g. 2567xxxxxxxx"
                     helperText="Enter the mobile money number where you want to receive the money"
+                    fullWidth
                   />
 
                   <Paper
@@ -590,28 +621,46 @@ export default function AdminWithdraw() {
                     }}
                   >
                     <Stack spacing={1}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        justifyContent="space-between"
+                        alignItems={{ xs: 'flex-start', sm: 'center' }}
+                        sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                      >
                         <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
                           Requested Amount
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 900, minWidth: 0, overflowWrap: 'anywhere' }}>
                           UGX {formatMoney(previewData?.requested_amount ?? parsedAmount ?? 0, 0)}
                         </Typography>
                       </Stack>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        justifyContent="space-between"
+                        alignItems={{ xs: 'flex-start', sm: 'center' }}
+                        sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                      >
                         <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
                           Transaction Fee
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 900, minWidth: 0, overflowWrap: 'anywhere' }}>
                           UGX {formatMoney(previewData?.withdrawal_fee ?? 0, 0)}
                         </Typography>
                       </Stack>
                       <Divider sx={{ borderColor: '#eef2f7' }} />
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        justifyContent="space-between"
+                        alignItems={{ xs: 'flex-start', sm: 'center' }}
+                        sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                      >
                         <Typography variant="body2" sx={{ color: '#15803d', fontWeight: 900 }}>
                           Net Amount (You will receive)
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 900, color: '#15803d' }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 900, color: '#15803d', minWidth: 0, overflowWrap: 'anywhere' }}
+                        >
                           UGX {formatMoney(previewData?.net_amount ?? 0, 0)}
                         </Typography>
                       </Stack>
@@ -633,6 +682,7 @@ export default function AdminWithdraw() {
                       borderRadius: 1,
                       fontWeight: 900,
                       py: 1.2,
+                      minHeight: 44,
                       bgcolor: '#2563eb',
                       '&:hover': { bgcolor: '#1d4ed8' },
                     }}
@@ -652,6 +702,7 @@ export default function AdminWithdraw() {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     placeholder="6-digit OTP"
+                    fullWidth
                   />
 
                   <Button
@@ -665,6 +716,7 @@ export default function AdminWithdraw() {
                       borderRadius: 1,
                       fontWeight: 900,
                       py: 1.2,
+                      minHeight: 44,
                       bgcolor: '#2563eb',
                       '&:hover': { bgcolor: '#1d4ed8' },
                     }}
@@ -684,7 +736,7 @@ export default function AdminWithdraw() {
                       setOtpExpiresAt(null);
                       setError('');
                     }}
-                    sx={{ textTransform: 'none', borderRadius: 1 }}
+                    sx={{ textTransform: 'none', borderRadius: 1, minHeight: 44 }}
                   >
                     Back
                   </Button>
@@ -694,15 +746,32 @@ export default function AdminWithdraw() {
           </Paper>
         </Stack>
 
-        <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e5e7eb', bgcolor: 'common.white' }}>
-          <Stack spacing={2} sx={{ p: 3 }}>
-            <Typography variant="h6" fontWeight={900}>
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 2,
+            border: '1px solid #e5e7eb',
+            bgcolor: 'common.white',
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+          }}
+        >
+          <Stack spacing={2} sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography variant="h6" fontWeight={400}>
               Recent Withdrawals
             </Typography>
           </Stack>
 
-          <TableContainer sx={{ overflowX: 'auto' }}>
-            <Table size="small" sx={{ minWidth: 620, '& th': { fontWeight: 900, bgcolor: '#f8fafc' } }}>
+          <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
+            <Table
+              size="small"
+              sx={{
+                minWidth: { xs: 720, md: 0 },
+                width: '100%',
+                '& th': { fontWeight: 900, bgcolor: '#f8fafc' },
+              }}
+            >
               <TableHead>
                 <TableRow>
                   <TableCell>Reference</TableCell>
@@ -780,7 +849,7 @@ export default function AdminWithdraw() {
                             setSelectedId(w.id);
                             setDetailsOpen(true);
                           }}
-                          sx={{ textTransform: 'none', borderRadius: 1 }}
+                          sx={{ textTransform: 'none', borderRadius: 1, minHeight: 44, px: 2 }}
                         >
                           View
                         </Button>
@@ -796,7 +865,7 @@ export default function AdminWithdraw() {
             <>
               <Divider sx={{ borderColor: '#eef2f7' }} />
 
-              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
                   Page {page} of {pageCount}
                 </Typography>
@@ -807,7 +876,7 @@ export default function AdminWithdraw() {
                     variant="outlined"
                     disabled={page <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    sx={{ textTransform: 'none', borderRadius: 1 }}
+                    sx={{ textTransform: 'none', borderRadius: 1, minHeight: 44 }}
                   >
                     Prev
                   </Button>
@@ -816,7 +885,7 @@ export default function AdminWithdraw() {
                     variant="contained"
                     disabled={page >= pageCount}
                     onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                    sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' } }}
+                    sx={{ textTransform: 'none', borderRadius: 1, minHeight: 44, bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' } }}
                   >
                     Next
                   </Button>

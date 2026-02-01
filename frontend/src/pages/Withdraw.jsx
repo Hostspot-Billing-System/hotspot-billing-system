@@ -232,7 +232,7 @@ export default function Withdraw() {
 
   return (
     <Box sx={{ width: '100%', pt: 1, pb: 5 }}>
-      <Typography variant="h4" fontWeight={900}>
+      <Typography variant="h4" fontWeight={400}>
         Withdraw
       </Typography>
 
@@ -241,7 +241,7 @@ export default function Withdraw() {
       </Typography>
 
       <Paper elevation={0} sx={{ mt: 2, borderRadius: 2, border: '1px solid #e5e7eb', bgcolor: 'common.white' }}>
-        <Stack spacing={2} sx={{ p: 3 }}>
+        <Stack spacing={2} sx={{ p: { xs: 2, sm: 3 } }}>
           {success ? <Alert severity="success">{success}</Alert> : null}
           {error ? <Alert severity="error">{error}</Alert> : null}
 
@@ -253,6 +253,7 @@ export default function Withdraw() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="e.g. 1000"
+                fullWidth
               />
 
               <TextField
@@ -261,39 +262,58 @@ export default function Withdraw() {
                 value={payoutPhone}
                 onChange={(e) => setPayoutPhone(e.target.value)}
                 placeholder="e.g. 2567xxxxxxxx"
+                fullWidth
               />
 
               <Paper elevation={0} sx={{ borderRadius: 1.5, border: '1px solid #e5e7eb', bgcolor: 'common.white', p: 2 }}>
                 <Stack spacing={1}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                  >
                     <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
                       Requested Amount
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 900, minWidth: 0, overflowWrap: 'anywhere' }}>
                       UGX {formatMoney(previewData?.requested_amount ?? parsedAmount ?? 0)}
                     </Typography>
                   </Stack>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                  >
                     <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
                       Transaction Fee
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 900, minWidth: 0, overflowWrap: 'anywhere' }}>
                       UGX {formatMoney(previewData?.withdrawal_fee ?? 0)}
                     </Typography>
                   </Stack>
                   <Divider sx={{ borderColor: '#eef2f7' }} />
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+                  >
                     <Typography variant="body2" sx={{ color: '#15803d', fontWeight: 900 }}>
                       Net Amount (You will receive)
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 900, color: '#15803d' }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 900, color: '#15803d', minWidth: 0, overflowWrap: 'anywhere' }}
+                    >
                       UGX {formatMoney(previewData?.net_amount ?? 0)}
                     </Typography>
                   </Stack>
                 </Stack>
               </Paper>
 
-              <Button variant="contained" disabled={loading || !previewAllowed} onClick={onRequestWithdrawal}>
+              <Button variant="contained" disabled={loading || !previewAllowed} onClick={onRequestWithdrawal} sx={{ minHeight: 44 }}>
                 {loading ? 'Requesting…' : 'Request Withdrawal'}
               </Button>
             </>
@@ -312,12 +332,14 @@ export default function Withdraw() {
                 }}
                 placeholder="6-digit OTP"
                 inputProps={{ inputMode: 'numeric', pattern: '\\d{6}', maxLength: 6 }}
+                fullWidth
               />
 
               <Button
                 variant="contained"
                 onClick={onVerifyOtp}
                 disabled={loading || otpExpired || !/^\d{6}$/.test(String(otp ?? ''))}
+                sx={{ minHeight: 44 }}
               >
                 {loading ? 'Verifying…' : 'Verify OTP'}
               </Button>
@@ -346,16 +368,24 @@ export default function Withdraw() {
           elevation={0}
           sx={{ mt: 2, borderRadius: 2, border: '1px solid #e5e7eb', bgcolor: 'common.white' }}
         >
-          <Stack spacing={1} sx={{ p: 3 }}>
-            <Typography variant="h6" fontWeight={900}>
+          <Stack spacing={1} sx={{ p: { xs: 2, sm: 3 }, minWidth: 0 }}>
+            <Typography variant="h6" fontWeight={400}>
               Recent Withdrawals
             </Typography>
             {recentWithdrawals.map((w) => (
-              <Stack key={w.id ?? w.reference ?? JSON.stringify(w)} direction="row" justifyContent="space-between">
-                <Typography variant="body2" sx={{ fontWeight: 800 }}>
+              <Stack
+                key={w.id ?? w.reference ?? JSON.stringify(w)}
+                direction={{ xs: 'column', sm: 'row' }}
+                justifyContent="space-between"
+                sx={{ minWidth: 0, gap: { xs: 0.25, sm: 1 } }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 800, minWidth: 0, overflowWrap: 'anywhere' }}>
                   {w.reference ?? `#${w.id}`}
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800 }}>
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'text.secondary', fontWeight: 800, minWidth: 0, overflowWrap: 'anywhere' }}
+                >
                   UGX {formatMoney(w.net_amount ?? w.total_amount ?? 0)}
                 </Typography>
               </Stack>

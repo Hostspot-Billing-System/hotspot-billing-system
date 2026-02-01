@@ -274,13 +274,38 @@ function resolveActiveKey({ activeKey, activePath }) {
   return 'dashboard';
 }
 
-function AdminSidebar({ activeKey, activePath, onNavigate, width = 240, title = 'Hotspot System' }) {
+function AdminSidebar({
+  activeKey,
+  activePath,
+  onNavigate,
+  onClose,
+  showClose = false,
+  width = 240,
+  title = 'Hotspot System',
+  variant = 'fixed',
+}) {
   const resolvedActiveKey = resolveActiveKey({ activeKey, activePath });
+  const isDrawer = variant === 'drawer';
 
   return (
-    <aside className={styles.sidebar} style={{ width }}>
+    <aside className={isDrawer ? `${styles.sidebar} ${styles.sidebarDrawer}` : styles.sidebar} style={{ width: isDrawer ? '100%' : width }}>
       <div className={styles.brand}>
         <div className={styles.brandTitle}>{title}</div>
+        {isDrawer && showClose ? (
+          <button
+            type="button"
+            className={styles.closeButton}
+            aria-label="Close menu"
+            onClick={() => onClose?.()}
+          >
+            <span className={styles.closeIcon} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </span>
+          </button>
+        ) : null}
       </div>
 
       <nav className={styles.nav} aria-label="Admin sidebar">

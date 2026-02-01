@@ -67,9 +67,9 @@ export default function BatchHistory() {
   }, []);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-        <Paper elevation={2} sx={{ width: '100%', maxWidth: 1100, p: 3 }}>
+        <Paper elevation={2} sx={{ width: '100%', maxWidth: 1100, p: { xs: 2, sm: 3 } }}>
           <Stack spacing={2.5}>
             <Box>
               <Typography variant="h5" fontWeight={800}>
@@ -89,8 +89,8 @@ export default function BatchHistory() {
               </Alert>
             ) : null}
 
-            <TableContainer>
-              <Table size="small">
+            <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <Table size="small" sx={{ minWidth: { xs: 760, md: 0 } }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>ID</TableCell>
@@ -124,10 +124,10 @@ export default function BatchHistory() {
                     rows.map((r) => (
                       <TableRow key={r.id} hover>
                         <TableCell>{r.id}</TableCell>
-                        <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <TableCell sx={{ maxWidth: { xs: 180, sm: 280 }, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {r.filename}
                         </TableCell>
-                        <TableCell sx={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <TableCell sx={{ maxWidth: { xs: 220, sm: 360 }, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {r.description ?? ''}
                         </TableCell>
                         <TableCell>{r.package_name}</TableCell>
@@ -141,6 +141,7 @@ export default function BatchHistory() {
                               const id = encodeURIComponent(String(r.id));
                               window.location.assign(`/admin/vouchers?batch_id=${id}`);
                             }}
+                            sx={{ minHeight: 44, px: 1.5, textTransform: 'none', borderRadius: 1 }}
                           >
                             View Vouchers
                           </Button>

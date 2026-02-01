@@ -151,8 +151,8 @@ export default function AdminVoucherList({ initialFilters }) {
   }, [apiPage, rowsPerPage, status, packageId, batchId]);
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Paper elevation={2} sx={{ p: 3 }}>
+    <Container maxWidth="xl" sx={{ py: { xs: 2, sm: 4 } }}>
+      <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={2}>
           <Box>
             <Typography variant="h5" fontWeight={700}>
@@ -164,7 +164,7 @@ export default function AdminVoucherList({ initialFilters }) {
           </Box>
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <FormControl sx={{ minWidth: 180 }} size="small">
+            <FormControl sx={{ minWidth: { xs: '100%', md: 180 } }} size="small" fullWidth>
               <InputLabel id="status-label">Status</InputLabel>
               <Select
                 labelId="status-label"
@@ -182,7 +182,7 @@ export default function AdminVoucherList({ initialFilters }) {
               </Select>
             </FormControl>
 
-            <FormControl sx={{ minWidth: 220 }} size="small">
+            <FormControl sx={{ minWidth: { xs: '100%', md: 220 } }} size="small" fullWidth>
               <InputLabel id="package-label">Package</InputLabel>
               <Select
                 labelId="package-label"
@@ -202,7 +202,7 @@ export default function AdminVoucherList({ initialFilters }) {
               </Select>
             </FormControl>
 
-            <FormControl sx={{ minWidth: 240 }} size="small">
+            <FormControl sx={{ minWidth: { xs: '100%', md: 240 } }} size="small" fullWidth>
               <InputLabel id="batch-label">Batch</InputLabel>
               <Select
                 labelId="batch-label"
@@ -232,8 +232,8 @@ export default function AdminVoucherList({ initialFilters }) {
             </Alert>
           ) : null}
 
-          <TableContainer>
-            <Table size="small">
+          <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <Table size="small" sx={{ minWidth: { xs: 820, md: 0 } }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Code</TableCell>

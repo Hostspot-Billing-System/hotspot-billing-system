@@ -242,6 +242,7 @@ export default function AdminTransactions() {
             display: 'flex',
             alignItems: 'center',
             gap: 1,
+            flexWrap: 'wrap',
             bgcolor: '#f8fafc',
             borderBottom: '1px solid #e5e7eb',
           }}
@@ -272,6 +273,7 @@ export default function AdminTransactions() {
               borderColor: '#cbd5e1',
               color: '#334155',
               bgcolor: 'common.white',
+              minHeight: 44,
               '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
             }}
           >
@@ -448,6 +450,7 @@ export default function AdminTransactions() {
                 borderRadius: 1,
                 fontWeight: 900,
                 bgcolor: '#2563eb',
+                minHeight: 44,
                 '&:hover': { bgcolor: '#1d4ed8' },
               }}
             >
@@ -487,6 +490,7 @@ export default function AdminTransactions() {
                 borderColor: '#86efac',
                 color: '#15803d',
                 bgcolor: 'common.white',
+                minHeight: 44,
                 '&:hover': { borderColor: '#4ade80', bgcolor: 'common.white' },
               }}
             >
@@ -511,11 +515,11 @@ export default function AdminTransactions() {
           overflow: 'hidden',
         }}
       >
-        <TableContainer sx={{ overflowX: 'auto' }}>
+        <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <Table
             size="small"
             sx={{
-              minWidth: 980,
+              minWidth: { xs: 980, lg: 0 },
               '& th': { bgcolor: '#f8fafc', fontWeight: 900 },
               '& td': { py: 1 },
             }}
@@ -591,7 +595,8 @@ export default function AdminTransactions() {
                           }
                         }}
                         sx={{
-                          minWidth: 32,
+                            minWidth: 44,
+                            minHeight: 44,
                           px: 0,
                           borderRadius: 1,
                           borderColor: '#cbd5e1',
@@ -620,7 +625,8 @@ export default function AdminTransactions() {
                         setDetailsOpen(true);
                       }}
                       sx={{
-                        minWidth: 34,
+                        minWidth: 44,
+                        minHeight: 44,
                         px: 0,
                         borderRadius: 1,
                         borderColor: '#93c5fd',
@@ -643,7 +649,7 @@ export default function AdminTransactions() {
           <>
             <Divider sx={{ borderColor: '#eef2f7' }} />
 
-            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
               <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>
                 Page {page} of {pageCount}
               </Typography>
@@ -654,7 +660,7 @@ export default function AdminTransactions() {
                   variant="outlined"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  sx={{ textTransform: 'none', borderRadius: 1 }}
+                  sx={{ textTransform: 'none', borderRadius: 1, minHeight: 44 }}
                 >
                   Prev
                 </Button>
@@ -663,7 +669,7 @@ export default function AdminTransactions() {
                   variant="contained"
                   disabled={page >= pageCount}
                   onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                  sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#2563eb', '&:hover': { bgcolor: '#1d4ed8' } }}
+                  sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#2563eb', minHeight: 44, '&:hover': { bgcolor: '#1d4ed8' } }}
                 >
                   Next
                 </Button>

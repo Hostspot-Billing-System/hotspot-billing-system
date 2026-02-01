@@ -837,7 +837,10 @@ export default function AdminVouchers() {
                     }}
                   />
 
-                  <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <FormControl
+                    size="small"
+                    sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 140 } }}
+                  >
                     <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} displayEmpty>
                       <MenuItem value="">All Status</MenuItem>
                       <MenuItem value="available">Available</MenuItem>
@@ -851,7 +854,7 @@ export default function AdminVouchers() {
                     placeholder="mm/dd/yyyy"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    sx={{ minWidth: 140 }}
+                    sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 140 } }}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
@@ -866,7 +869,7 @@ export default function AdminVouchers() {
                     placeholder="mm/dd/yyyy"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    sx={{ minWidth: 140 }}
+                    sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 140 } }}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
@@ -876,7 +879,10 @@ export default function AdminVouchers() {
                     }}
                   />
 
-                  <FormControl size="small" sx={{ minWidth: 92 }}>
+                  <FormControl
+                    size="small"
+                    sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 92 } }}
+                  >
                     <Select value={String(limit)} onChange={(e) => setLimit(Number(e.target.value))}>
                       <MenuItem value="25">25</MenuItem>
                       <MenuItem value="50">50</MenuItem>
@@ -888,7 +894,8 @@ export default function AdminVouchers() {
                   <Button
                     variant="contained"
                     sx={{
-                      minWidth: 40,
+                      minWidth: 44,
+                      minHeight: 44,
                       px: 0,
                       bgcolor: '#2563eb',
                       borderRadius: 1,
@@ -900,7 +907,7 @@ export default function AdminVouchers() {
                   </Button>
                 </Stack>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     Showing {visibleRows.length} of {filtered.length} vouchers{' '}
                     {filtered.length > limit ? <span style={{ color: '#f59e0b' }}>(limited to {limit})</span> : null}
@@ -916,6 +923,8 @@ export default function AdminVouchers() {
                       borderRadius: 1,
                       bgcolor: '#f87171',
                       fontWeight: 900,
+                      minHeight: 44,
+                      width: { xs: '100%', sm: 'auto' },
                       '&:hover': { bgcolor: '#ef4444' },
                     }}
                   >
@@ -934,12 +943,12 @@ export default function AdminVouchers() {
                   </Alert>
                 ) : null}
 
-                <TableContainer sx={{ overflowX: 'auto' }}>
+                <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                   <Table
                     size="small"
                     sx={{
                       width: '100%',
-                      minWidth: 920,
+                      minWidth: { xs: 920, lg: 0 },
                       '& th, & td': { py: 0.75 },
                       '& th': { bgcolor: '#f8fafc', fontWeight: 900 },
                     }}
