@@ -4,7 +4,6 @@ import PortalLayout from './PortalLayout.jsx';
 import {
 	buyBundle,
 	fetchPortalBundles,
-	fetchPortalContext,
 	getApiErrorMessage,
 	voucherConnect,
 } from '../services/portal.js';
@@ -32,36 +31,40 @@ function formatDurationLabelFromMinutes(durationMinutes) {
 	return `${mins} Minutes`;
 }
 
-function formatUgx(value) {
-	const n = Number(value);
-	if (!Number.isFinite(n)) return '';
-	return `${n.toLocaleString()} UGX`;
-}
-
-function getPortalQueryContext() {
-	const params = new URLSearchParams(window.location.search);
-	const mac = params.get('mac') || '';
-	const ip = params.get('ip') || '';
-	const iface = params.get('interface') || '';
-	const routerId = params.get('router_id') || '';
-	return {
-		mac: mac || null,
-		ip: ip || null,
-		interface: iface || null,
-		router_id: routerId || null,
-	};
+function formatCountdown(totalSeconds) {
+	const s = toInt(totalSeconds);
+	if (s == null || s < 0) return '0:00';
+	const hours = Math.floor(s / 3600);
+	const minutes = Math.floor((s % 3600) / 60);
+	const seconds = s % 60;
+	if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+	return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export default function PortalHome() {
 	const [voucherCode, setVoucherCode] = React.useState('');
 	const [phone, setPhone] = React.useState('256707434218');
-	const [portalContext, setPortalContext] = React.useState(null);
 	const [bundles, setBundles] = React.useState([]);
 	const [bundlesError, setBundlesError] = React.useState('');
 	const [voucherError, setVoucherError] = React.useState('');
+	const [voucherSuccess, setVoucherSuccess] = React.useState(null);
+	const [voucherExpiredMessage, setVoucherExpiredMessage] = React.useState('');
+	const [voucherCountdownSeconds, setVoucherCountdownSeconds] = React.useState(null);
 	const [buyError, setBuyError] = React.useState('');
 	const [buyResult, setBuyResult] = React.useState(null);
 	const inFlightRef = React.useRef({ voucher: false, pay: false, context: false, bundles: false });
+	const voucherTimerRef = React.useRef(null);
+	const voucherExpiresAtMsRef = React.useRef(null);
+	const voucherInputRef = React.useRef(null);
+
+	React.useEffect(() => {
+		return () => {
+			if (voucherTimerRef.current) {
+				clearInterval(voucherTimerRef.current);
+				voucherTimerRef.current = null;
+			}
+		};
+	}, []);
 
 	React.useEffect(() => {
 		let alive = true;
@@ -98,33 +101,6 @@ export default function PortalHome() {
 		};
 	}, []);
 
-	React.useEffect(() => {
-		let alive = true;
-		(async () => {
-			const ctx = getPortalQueryContext();
-			if (!ctx.mac || !ctx.ip) return;
-			if (inFlightRef.current.context) return;
-			inFlightRef.current.context = true;
-			try {
-				const data = await fetchPortalContext({
-					mac: ctx.mac,
-					ip: ctx.ip,
-					interface: ctx.interface,
-					router_id: ctx.router_id,
-				});
-				if (!alive) return;
-				setPortalContext(data);
-			} catch (err) {
-				// Keep silent; portal should still allow voucher/buy flows.
-			} finally {
-				inFlightRef.current.context = false;
-			}
-		})();
-		return () => {
-			alive = false;
-		};
-	}, []);
-
 	async function onConnectVoucher() {
 		if (inFlightRef.current.voucher) return;
 		const code = String(voucherCode ?? '').trim();
@@ -136,7 +112,55 @@ export default function PortalHome() {
 		inFlightRef.current.voucher = true;
 		try {
 			setVoucherError('');
-			await voucherConnect({ voucher: code });
+			setVoucherSuccess(null);
+			setVoucherExpiredMessage('');
+			setVoucherCountdownSeconds(null);
+			voucherExpiresAtMsRef.current = null;
+			if (voucherTimerRef.current) {
+				clearInterval(voucherTimerRef.current);
+				voucherTimerRef.current = null;
+			}
+
+			const data = await voucherConnect({ voucher: code });
+			const durationMinutes = toInt(data?.durationMinutes ?? data?.duration_minutes);
+			const expiresAtIso = data?.expiresAt ?? data?.expires_at ?? null;
+			const expiresAtMs = expiresAtIso ? Date.parse(expiresAtIso) : NaN;
+
+			setVoucherSuccess({
+				message: 'Internet access granted',
+				durationMinutes,
+				expiresAt: Number.isFinite(expiresAtMs) ? expiresAtIso : null,
+			});
+
+			// Countdown is calculated from timestamps (not by decrementing), so refreshes are correct.
+			if (Number.isFinite(expiresAtMs)) {
+				voucherExpiresAtMsRef.current = expiresAtMs;
+				const update = () => {
+					const ms = voucherExpiresAtMsRef.current;
+					if (!Number.isFinite(ms)) return;
+					const remaining = Math.max(0, Math.floor((ms - Date.now()) / 1000));
+					setVoucherCountdownSeconds(remaining);
+					if (remaining <= 0) {
+						if (voucherTimerRef.current) {
+							clearInterval(voucherTimerRef.current);
+							voucherTimerRef.current = null;
+						}
+						voucherExpiresAtMsRef.current = null;
+						setVoucherSuccess(null);
+						setVoucherCountdownSeconds(null);
+						setVoucherExpiredMessage('Session expired');
+						// "Redirect" back to voucher entry.
+						try {
+							voucherInputRef.current?.focus?.();
+						} catch {
+							// ignore
+						}
+					}
+				};
+				update();
+				voucherTimerRef.current = setInterval(update, 1000);
+			}
+
 			setVoucherCode('');
 		} catch (err) {
 			setVoucherError(getApiErrorMessage(err));
@@ -189,6 +213,7 @@ export default function PortalHome() {
 						placeholder="Enter voucher code"
 						value={voucherCode}
 						onChange={(e) => setVoucherCode(e.target.value)}
+						ref={voucherInputRef}
 						className="w-full rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[17px] font-semibold text-white placeholder:text-white/40 outline-none focus:border-white/20"
 					/>
 					<button
@@ -199,6 +224,20 @@ export default function PortalHome() {
 					>
 						{inFlightRef.current.voucher ? 'CONNECTING...' : 'CONNECT'}
 					</button>
+					{voucherSuccess?.message ? (
+						<div className="text-center text-[12px] font-semibold text-white/70">
+							{voucherSuccess.message}
+							{voucherSuccess?.durationMinutes ? (
+								<span> • {formatDurationLabelFromMinutes(voucherSuccess.durationMinutes)}</span>
+							) : null}
+							{voucherCountdownSeconds != null ? (
+								<span> • {formatCountdown(voucherCountdownSeconds)}</span>
+							) : null}
+						</div>
+					) : null}
+					{voucherExpiredMessage ? (
+						<div className="text-center text-[12px] font-semibold text-white/70">{voucherExpiredMessage}</div>
+					) : null}
 					{voucherError ? (
 						<div className="text-center text-[12px] font-semibold text-white/70">{voucherError}</div>
 					) : null}

@@ -3,7 +3,7 @@ import cors from "cors";
 
 /* ROUTES */
 import healthRoutes from "./routes/healthRoutes.js";
-import runtimeRoutes from "./routes/runtime.routes.js";
+import runtimeRoutes from "./routes/runtimeRoutes.js";
 import captiveRoutes from "./routes/captiveRoutes.js";
 import vouchersRoutes from "./routes/vouchersRoutes.js";
 import packagesRoutes from "./routes/packagesRoutes.js";

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const DEFAULT_BUNDLES = [
+const DEFAULT_BUNDLES = [
 	{ id: '2h', name: '2 Hours', price: 500, currency: 'UGX' },
 	{ id: '12h', name: '12 Hours', price: 1000, currency: 'UGX' },
 	{ id: 'daily', name: 'Daily', price: 1500, currency: 'UGX' },

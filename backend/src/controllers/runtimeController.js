@@ -7,6 +7,7 @@ import {
   getRuntimeHotspotUsers,
   upsertRuntimeHotspotUser,
 } from '../services/mikrotikRuntimeService.js';
+import { env } from '../config/env.js';
 
 import { toHttpError } from '../services/mikrotikRuntime/errors.js';
 
@@ -98,29 +99,50 @@ export async function runtimeHotspotDisconnectHandler(req, res) {
 }
 
 export async function runtimeHealthHandler(req, res) {
+  const mode = String(env.MT_MODE ?? 'real').toLowerCase();
+  const isMock = env.MIKROTIK_MOCK || mode === 'mock';
+
+  // In mock mode this endpoint must NEVER fail.
+  if (isMock) {
+    return res.status(200).json({
+      success: true,
+      status: 'online',
+      router: 'mock',
+      identity: 'mikrotik-mock',
+      mode: 'mock',
+    });
+  }
+
   try {
     const status = await getRuntimeHealth();
     return res.status(200).json({
       success: true,
-      router: {
-        online: true,
-        identity: status?.identity ?? null,
-      },
+      status: 'online',
+      router: 'real',
+      identity: status?.identity ?? null,
+      mode: 'real',
     });
   } catch (err) {
     const http = toHttpError(err);
-    // Ensure stable offline response shape
+
+    // In real mode we still return a stable payload (but keep a non-200 status).
     if (http?.body?.error?.code) {
-      return res.status(http.httpStatus).json({
+      return res.status(http.httpStatus ?? 503).json({
         success: false,
-        router: { online: false, identity: null },
+        status: 'offline',
+        router: 'real',
+        identity: null,
+        mode: 'real',
         error: http.body.error,
       });
     }
 
     return res.status(503).json({
       success: false,
-      router: { online: false, identity: null },
+      status: 'offline',
+      router: 'real',
+      identity: null,
+      mode: 'real',
       error: { code: 'MIKROTIK_OFFLINE', message: 'MikroTik is offline' },
     });
   }

@@ -23,7 +23,6 @@ import {
 
 import {
   fetchWithdrawals,
-  getWithdrawableBalance,
   getWithdrawableSummary,
   previewWithdrawal,
   requestWithdrawal,

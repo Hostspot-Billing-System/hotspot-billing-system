@@ -6,11 +6,12 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material';
-import AdminSidebar, { ADMIN_SIDEBAR_MENU } from './AdminSidebar';
+import AdminSidebar from './AdminSidebar';
+import { ADMIN_SIDEBAR_MENU } from './adminSidebarMenu';
 
 const drawerWidth = 240;
 
-export const ADMIN_SIDEBAR_ITEMS = [
+const ADMIN_SIDEBAR_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', path: '/' },
   { key: 'upload', label: 'Voucher Upload', path: '/voucher-upload' },
   { key: 'batches', label: 'Batch History', path: '/batch-history' },

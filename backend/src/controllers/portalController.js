@@ -568,8 +568,20 @@ export async function postPortalVoucherConnectHandler(req, res) {
 		});
 		console.log('[PortalVoucherConnect] bundle assigned', { voucher: row.code, bundle_id: row.package_id, profile });
 
+		const durationMinutes = row?.duration_minutes == null ? null : Number(row.duration_minutes);
+		const expiresAt =
+			durationMinutes != null && Number.isFinite(durationMinutes) && durationMinutes > 0
+				? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString()
+				: null;
+
 		await client.query('COMMIT');
-		return res.status(200).json({ success: true });
+		return res.status(200).json({
+			success: true,
+			data: {
+				durationMinutes: durationMinutes != null && Number.isFinite(durationMinutes) ? durationMinutes : null,
+				expiresAt,
+			},
+		});
 	} catch (err) {
 		if (client) {
 			try {
