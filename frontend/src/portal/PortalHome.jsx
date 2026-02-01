@@ -2,11 +2,11 @@ import React from 'react';
 
 import PortalLayout from './PortalLayout.jsx';
 import {
-	createPortalPaymentIntent,
+	buyBundle,
 	fetchPortalBundles,
 	fetchPortalContext,
 	getApiErrorMessage,
-	voucherLogin,
+	voucherConnect,
 } from '../services/portal.js';
 
 function toInt(value) {
@@ -57,6 +57,10 @@ export default function PortalHome() {
 	const [phone, setPhone] = React.useState('256707434218');
 	const [portalContext, setPortalContext] = React.useState(null);
 	const [bundles, setBundles] = React.useState([]);
+	const [bundlesError, setBundlesError] = React.useState('');
+	const [voucherError, setVoucherError] = React.useState('');
+	const [buyError, setBuyError] = React.useState('');
+	const [buyResult, setBuyResult] = React.useState(null);
 	const inFlightRef = React.useRef({ voucher: false, pay: false, context: false, bundles: false });
 
 	React.useEffect(() => {
@@ -67,13 +71,13 @@ export default function PortalHome() {
 			try {
 				const data = await fetchPortalBundles();
 				if (!alive) return;
+				setBundlesError('');
 				const normalized = (Array.isArray(data) ? data : []).map((b) => {
-					const durationLabel = formatDurationLabelFromMinutes(b?.duration_minutes);
 					const name = String(b?.name ?? '').trim();
-					const price = formatUgx(b?.price_ugx);
-					const secondary = [durationLabel, price].filter(Boolean).join(' • ');
+					const rateLimit = String(b?.rateLimit ?? b?.rate_limit ?? b?.['rate-limit'] ?? '').trim();
+					const secondary = rateLimit ? rateLimit : '';
 					return {
-						id: b?.id,
+						id: b?.id ?? name,
 						name,
 						secondary,
 						_raw: b,
@@ -82,8 +86,7 @@ export default function PortalHome() {
 				setBundles(normalized);
 			} catch (err) {
 				if (alive) {
-					// No UI changes allowed; use an alert for errors.
-					window.alert(getApiErrorMessage(err));
+					setBundlesError(getApiErrorMessage(err));
 					setBundles([]);
 				}
 			} finally {
@@ -112,7 +115,7 @@ export default function PortalHome() {
 				if (!alive) return;
 				setPortalContext(data);
 			} catch (err) {
-				if (alive) window.alert(getApiErrorMessage(err));
+				// Keep silent; portal should still allow voucher/buy flows.
 			} finally {
 				inFlightRef.current.context = false;
 			}
@@ -126,25 +129,17 @@ export default function PortalHome() {
 		if (inFlightRef.current.voucher) return;
 		const code = String(voucherCode ?? '').trim();
 		if (!code) {
-			window.alert('Enter voucher code');
-			return;
-		}
-
-		const ctx = portalContext ?? getPortalQueryContext();
-		const mac = ctx?.mac;
-		const ip = ctx?.ip;
-		if (!mac || !ip) {
-			window.alert('Missing portal context (mac/ip). Open the portal link from the router.');
+			setVoucherError('Enter voucher code');
 			return;
 		}
 
 		inFlightRef.current.voucher = true;
 		try {
-			const data = await voucherLogin({ mac, ip, voucher_code: code });
-			window.alert(data?.transaction_reference ? `Connected. Ref: ${data.transaction_reference}` : 'Connected');
+			setVoucherError('');
+			await voucherConnect({ voucher: code });
 			setVoucherCode('');
 		} catch (err) {
-			window.alert(getApiErrorMessage(err));
+			setVoucherError(getApiErrorMessage(err));
 		} finally {
 			inFlightRef.current.voucher = false;
 		}
@@ -154,35 +149,24 @@ export default function PortalHome() {
 		if (inFlightRef.current.pay) return;
 		const msisdn = String(phone ?? '').trim();
 		if (!msisdn) {
-			window.alert('Enter phone number');
+			setBuyError('Enter phone number');
 			return;
 		}
 
-		const ctx = portalContext ?? getPortalQueryContext();
-		const mac = ctx?.mac;
-		const ip = ctx?.ip;
-		if (!mac || !ip) {
-			window.alert('Missing portal context (mac/ip). Open the portal link from the router.');
-			return;
-		}
-
-		const bundleId = bundle?._raw?.id ?? bundle?.id;
-		if (!bundleId) {
-			window.alert('Bundle not available');
+		const bundleName = String(bundle?._raw?.profile ?? bundle?._raw?.name ?? bundle?.name ?? '').trim();
+		if (!bundleName) {
+			setBuyError('Bundle not available');
 			return;
 		}
 
 		inFlightRef.current.pay = true;
 		try {
-			const data = await createPortalPaymentIntent({
-				mac,
-				ip,
-				phone: msisdn,
-				bundle_id: bundleId,
-			});
-			window.alert(data?.message || 'Transaction created');
+			setBuyError('');
+			setBuyResult(null);
+			const data = await buyBundle({ phone: msisdn, bundle: bundleName });
+			setBuyResult({ username: data?.username ?? '', password: data?.password ?? '' });
 		} catch (err) {
-			window.alert(getApiErrorMessage(err));
+			setBuyError(getApiErrorMessage(err));
 		} finally {
 			inFlightRef.current.pay = false;
 		}
@@ -210,10 +194,14 @@ export default function PortalHome() {
 					<button
 						type="button"
 						onClick={onConnectVoucher}
+						disabled={inFlightRef.current.voucher}
 						className="w-full cursor-pointer rounded-xl bg-emerald-600 px-4 py-3 text-[17px] font-extrabold tracking-wide text-white shadow-[0_10px_22px_rgba(16,185,129,0.22)] transition hover:bg-emerald-500"
 					>
-						CONNECT
+						{inFlightRef.current.voucher ? 'CONNECTING...' : 'CONNECT'}
 					</button>
+					{voucherError ? (
+						<div className="text-center text-[12px] font-semibold text-white/70">{voucherError}</div>
+					) : null}
 				</div>
 
 				<div className="mt-5 text-center">
@@ -253,9 +241,23 @@ export default function PortalHome() {
 							className="w-full bg-transparent text-[17px] font-semibold text-white placeholder:text-white/35 outline-none"
 						/>
 					</div>
+					{buyError ? (
+						<div className="mt-3 text-center text-[12px] font-semibold text-white/70">{buyError}</div>
+					) : null}
+					{buyResult?.username && buyResult?.password ? (
+						<div className="mt-3 text-center text-[12px] font-semibold text-white/70">
+							Username: {buyResult.username} • Password: {buyResult.password}
+						</div>
+					) : null}
 				</div>
 
 				<div className="mt-5 space-y-3">
+					{inFlightRef.current.bundles ? (
+						<div className="text-center text-[12px] font-semibold text-white/60">Loading bundles...</div>
+					) : null}
+					{bundlesError ? (
+						<div className="text-center text-[12px] font-semibold text-white/60">{bundlesError}</div>
+					) : null}
 					{bundles.map((b) => (
 						<div
 							key={b.id}
@@ -268,9 +270,10 @@ export default function PortalHome() {
 							<button
 								type="button"
 								onClick={() => onBuyNow(b)}
+								disabled={inFlightRef.current.pay}
 								className="cursor-pointer rounded-lg bg-emerald-600 px-3 py-2 text-[12px] font-extrabold text-white shadow-sm transition hover:bg-emerald-500"
 							>
-								BUY NOW
+								{inFlightRef.current.pay ? 'LOADING...' : 'BUY NOW'}
 							</button>
 						</div>
 					))}

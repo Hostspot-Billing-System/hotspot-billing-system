@@ -42,9 +42,11 @@ export const env = {
   // MikroTik (validated when used)
   MT_MODE: (process.env.MT_MODE ?? 'real').toLowerCase(),
   MIKROTIK_MOCK: String(process.env.MIKROTIK_MOCK ?? '').toLowerCase() === 'true',
-  MT_HOST: process.env.MT_HOST,
-  MT_USER: process.env.MT_USER,
-  MT_PASS: process.env.MT_PASS,
-  MT_PORT: Number(process.env.MT_PORT ?? 8728),
+  // Prefer explicit MikroTik env names, fall back to legacy MT_*.
+  // Defaults are safe for common RouterOS v6 local networks.
+  MT_HOST: process.env.MT_HOST ?? process.env.MIKROTIK_HOST ?? '10.5.50.1',
+  MT_USER: process.env.MT_USER ?? process.env.MIKROTIK_USERNAME,
+  MT_PASS: process.env.MT_PASS ?? process.env.MIKROTIK_PASSWORD,
+  MT_PORT: Number(process.env.MT_PORT ?? process.env.MIKROTIK_PORT ?? 8728),
   MT_TIMEOUT_MS: Number(process.env.MT_TIMEOUT_MS ?? 5000),
 };

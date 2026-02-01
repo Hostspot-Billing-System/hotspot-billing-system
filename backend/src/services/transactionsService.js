@@ -332,6 +332,55 @@ export class TransactionsService {
     throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
   }
 
+  static async createPendingPortalBuyTransactionTransactional(client, { bundle_id, customer_phone }) {
+    const bundleId = parseOptionalPositiveInt(bundle_id, 'bundle_id');
+    if (!bundleId) throw new DomainError('BAD_REQUEST', 'bundle_id must be a valid number', 400);
+    const phone = normalizeText(customer_phone);
+    if (!phone) throw new DomainError('BAD_REQUEST', 'customer_phone is required', 400);
+
+    let reference = generateReference();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await client.query(
+        `
+        INSERT INTO transactions (
+          reference,
+          voucher_code,
+          bundle_id,
+          customer_phone,
+          amount_ugx,
+          commission_ugx,
+          status,
+          payment_method,
+          payment_provider,
+          client_id
+        ) VALUES (
+          $1,
+          NULL,
+          $2,
+          $3,
+          NULL,
+          NULL,
+          'pending',
+          'PENDING_PAYMENT',
+          'NONE',
+          NULL
+        )
+        ON CONFLICT (reference) DO NOTHING
+        RETURNING id, reference
+        `,
+        [reference, bundleId, phone]
+      );
+
+      if (res.rows?.[0]) {
+        return { id: Number(res.rows?.[0]?.id), reference: res.rows?.[0]?.reference ?? reference };
+      }
+
+      reference = generateReference();
+    }
+
+    throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
+  }
+
   static async markTransactionFailedByReference(reference, { failure_reason } = {}) {
     const ref = normalizeText(reference);
     if (!ref) throw new DomainError('BAD_REQUEST', 'reference is required', 400);

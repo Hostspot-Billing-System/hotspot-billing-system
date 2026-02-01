@@ -1,14 +1,14 @@
 import {
-  getHotspotUser,
-  listHotspotActive,
-  setHotspotUserDisabled,
-  upsertHotspotUser,
-} from '../services/mikrotikRuntime/runtimeService.js';
+  getRuntimeHotspotActive,
+  getRuntimeHotspotUser,
+  setRuntimeHotspotUserDisabled,
+  upsertRuntimeHotspotUser,
+} from '../services/mikrotikRuntimeService.js';
 import { toHttpError } from '../services/mikrotikRuntime/errors.js';
 
 export async function upsertHotspotUserHandler(req, res) {
   try {
-    const result = await upsertHotspotUser(req.body);
+    const result = await upsertRuntimeHotspotUser(req.body);
     return res.status(result?.action === 'created' ? 201 : 200).json({
       success: true,
       action: result.action,
@@ -23,7 +23,7 @@ export async function upsertHotspotUserHandler(req, res) {
 export async function enableHotspotUserHandler(req, res) {
   try {
     const username = req.params?.username;
-    const result = await setHotspotUserDisabled({ username, disabled: false });
+    const result = await setRuntimeHotspotUserDisabled({ username, disabled: false });
     if (!result.ok) {
       return res.status(404).json({
         success: false,
@@ -41,7 +41,7 @@ export async function enableHotspotUserHandler(req, res) {
 export async function disableHotspotUserHandler(req, res) {
   try {
     const username = req.params?.username;
-    const result = await setHotspotUserDisabled({ username, disabled: true });
+    const result = await setRuntimeHotspotUserDisabled({ username, disabled: true });
     if (!result.ok) {
       return res.status(404).json({
         success: false,
@@ -59,7 +59,7 @@ export async function disableHotspotUserHandler(req, res) {
 export async function getHotspotUserHandler(req, res) {
   try {
     const username = req.params?.username;
-    const user = await getHotspotUser(username);
+    const user = await getRuntimeHotspotUser(username);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -77,7 +77,7 @@ export async function getHotspotUserHandler(req, res) {
 export async function listHotspotActiveHandler(req, res) {
   try {
     const user = req.query?.user;
-    const sessions = await listHotspotActive({ user });
+    const sessions = await getRuntimeHotspotActive({ user });
     return res.status(200).json({ success: true, data: sessions });
   } catch (err) {
     const { httpStatus, body } = toHttpError(err);

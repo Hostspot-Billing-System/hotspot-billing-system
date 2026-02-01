@@ -1,4 +1,4 @@
-import { disconnectHotspotUser } from '../services/mikrotikRuntime/runtimeService.js';
+import { disconnectRuntimeHotspotUser } from '../services/mikrotikRuntimeService.js';
 import { toHttpError } from '../services/mikrotikRuntime/errors.js';
 
 function normalizeText(value) {
@@ -16,7 +16,7 @@ export async function disconnectMikroTikUserHandler(req, res) {
       });
     }
 
-    const result = await disconnectHotspotUser({ username: user });
+    const result = await disconnectRuntimeHotspotUser({ username: user });
 
     // Return success even if user not active.
     return res.status(200).json({ success: true, removed: result.removed ?? 0 });

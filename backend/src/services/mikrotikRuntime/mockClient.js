@@ -104,6 +104,40 @@ export class MikroTikMockClient {
     return list.map(normalizeActive);
   }
 
+  async listHotspotProfiles() {
+    // Profiles are stored as names in a Set.
+    return [...this._state.profiles].map((name) => ({ id: `*PROFILE_${name}`, name }));
+  }
+
+  async listHotspotUsers({ username } = {}) {
+    const name = username ? String(username).trim() : null;
+    if (name) {
+      const u = await this.getHotspotUser(name);
+      return u ? [u] : [];
+    }
+
+    const out = [];
+    for (const u of this._state.usersByName.values()) {
+      out.push(normalizeUser(u));
+    }
+    return out;
+  }
+
+  async removeHotspotUser({ username }) {
+    const name = String(username ?? '').trim();
+    if (!name) throw new MikroTikRuntimeError('MIKROTIK_BAD_INPUT', 'username is required', 400);
+    const existed = this._state.usersByName.delete(name);
+
+    // Also clear any active sessions.
+    this._state.active = this._state.active.filter((s) => s.user !== name);
+
+    return existed ? { ok: true } : { ok: false, reason: 'not_found' };
+  }
+
+  async getSystemIdentity() {
+    return { name: 'mikrotik-mock' };
+  }
+
   async removeHotspotActiveById({ id }) {
     const activeId = String(id ?? '').trim();
     if (!activeId) throw new MikroTikRuntimeError('MIKROTIK_BAD_INPUT', 'id is required', 400);

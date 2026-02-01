@@ -1,7 +1,7 @@
 import { env } from '../../config/env.js';
 import { MikroTikRuntimeError } from './errors.js';
 import { MikroTikMockClient } from './mockClient.js';
-import { MikroTikRealApi8728Client } from './realApiClient.js';
+import { MikroTikApiClient, MikroTikRealApi8728Client } from './realApiClient.js';
 
 let singleton = null;
 
@@ -10,7 +10,7 @@ function createClient() {
 
   const mode = String(env.MT_MODE ?? 'real').toLowerCase();
   if (mode === 'mock') return new MikroTikMockClient();
-  if (mode === 'real') return new MikroTikRealApi8728Client();
+  if (mode === 'real') return new MikroTikApiClient();
 
   throw new MikroTikRuntimeError('MIKROTIK_BAD_CONFIG', `Unsupported MT_MODE: ${mode}`, 500);
 }
@@ -59,6 +59,34 @@ export async function getHotspotUser(username) {
 export async function listHotspotActive({ user } = {}) {
   const client = getMikroTikRuntimeClient();
   return client.listHotspotActive({ username: user ? String(user) : undefined });
+}
+
+export async function listHotspotProfiles() {
+  const client = getMikroTikRuntimeClient();
+  return client.listHotspotProfiles();
+}
+
+export async function listHotspotUsers({ username } = {}) {
+  const client = getMikroTikRuntimeClient();
+  return client.listHotspotUsers({ username: username ? String(username) : undefined });
+}
+
+export async function removeHotspotUser({ username }) {
+  const name = String(username ?? '').trim();
+  if (!name) throw new MikroTikRuntimeError('BAD_REQUEST', 'username is required', 400);
+
+  const client = getMikroTikRuntimeClient();
+  return client.removeHotspotUser({ username: name });
+}
+
+export async function runtimeHealthCheck() {
+  const client = getMikroTikRuntimeClient();
+  await client.connect();
+  const identity = await client.getSystemIdentity();
+  return {
+    online: true,
+    identity: identity?.name ?? null,
+  };
 }
 
 export async function removeHotspotActiveById({ id }) {

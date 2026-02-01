@@ -18,6 +18,14 @@ function isConnectivityError(message) {
   return /connect|timeout|econn|socket|unreach|refused|timed out/i.test(String(message ?? ''));
 }
 
+function isAuthError(message) {
+  return /invalid user|invalid password|login failure|not logged in|authentication/i.test(String(message ?? ''));
+}
+
+function isTimeoutError(message) {
+  return /timeout|timed out|SOCKTMOUT/i.test(String(message ?? ''));
+}
+
 function normalizeUserRecord(row) {
   if (!row) return null;
   return {
@@ -51,6 +59,14 @@ function normalizeActiveRecord(row) {
   };
 }
 
+function normalizeProfileRecord(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name ?? null,
+  };
+}
+
 export class MikroTikRealApi8728Client {
   constructor() {
     requireMikroTikEnv();
@@ -73,6 +89,14 @@ export class MikroTikRealApi8728Client {
       return this.client;
     } catch (err) {
       const message = err?.message ?? err;
+      if (isAuthError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_AUTH_FAILED', 'MikroTik authentication failed.', 502);
+      }
+
+      if (isTimeoutError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_TIMEOUT', 'Connection to MikroTik timed out.', 504);
+      }
+
       const connectivity = isConnectivityError(message);
       throw new MikroTikRuntimeError(
         connectivity ? 'MIKROTIK_UNREACHABLE' : 'MIKROTIK_CONNECT_FAILED',
@@ -203,4 +227,113 @@ export class MikroTikRealApi8728Client {
       );
     }
   }
+
+  async listHotspotProfiles() {
+    const client = await this.connect();
+    try {
+      const menu = client.menu('/ip hotspot user profile');
+      const rows = await menu.get();
+      return (rows ?? []).map(normalizeProfileRecord).filter(Boolean);
+    } catch (err) {
+      const message = err?.message ?? err;
+      if (isAuthError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_AUTH_FAILED', 'MikroTik authentication failed.', 502);
+      }
+      if (isTimeoutError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_TIMEOUT', 'MikroTik request timed out.', 504);
+      }
+      const connectivity = isConnectivityError(message);
+      throw new MikroTikRuntimeError(
+        connectivity ? 'MIKROTIK_UNREACHABLE' : 'MIKROTIK_COMMAND_FAILED',
+        connectivity ? 'MikroTik is unreachable. Please try again shortly.' : 'MikroTik command failed.',
+        connectivity ? 503 : 502
+      );
+    }
+  }
+
+  async listHotspotUsers({ username } = {}) {
+    const client = await this.connect();
+    try {
+      const menu = client.menu('/ip hotspot user');
+      const query = username ? menu.where({ name: username }) : menu;
+      const rows = await query.get();
+      return (rows ?? []).map(normalizeUserRecord).filter(Boolean);
+    } catch (err) {
+      const message = err?.message ?? err;
+      if (isAuthError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_AUTH_FAILED', 'MikroTik authentication failed.', 502);
+      }
+      if (isTimeoutError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_TIMEOUT', 'MikroTik request timed out.', 504);
+      }
+      const connectivity = isConnectivityError(message);
+      throw new MikroTikRuntimeError(
+        connectivity ? 'MIKROTIK_UNREACHABLE' : 'MIKROTIK_COMMAND_FAILED',
+        connectivity ? 'MikroTik is unreachable. Please try again shortly.' : 'MikroTik command failed.',
+        connectivity ? 503 : 502
+      );
+    }
+  }
+
+  async removeHotspotUser({ username }) {
+    const name = String(username ?? '').trim();
+    if (!name) {
+      throw new MikroTikRuntimeError('MIKROTIK_BAD_INPUT', 'username is required', 400);
+    }
+
+    const client = await this.connect();
+    try {
+      const menu = client.menu('/ip hotspot user');
+      const existing = await menu.where({ name }).getOnly().catch(() => null);
+      if (!existing) return { ok: false, reason: 'not_found' };
+
+      await menu.remove(String(existing.id));
+      return { ok: true };
+    } catch (err) {
+      const message = err?.message ?? err;
+      if (isAuthError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_AUTH_FAILED', 'MikroTik authentication failed.', 502);
+      }
+      if (isTimeoutError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_TIMEOUT', 'MikroTik request timed out.', 504);
+      }
+      const connectivity = isConnectivityError(message);
+      throw new MikroTikRuntimeError(
+        connectivity ? 'MIKROTIK_UNREACHABLE' : 'MIKROTIK_COMMAND_FAILED',
+        connectivity ? 'MikroTik is unreachable. Please try again shortly.' : 'MikroTik command failed.',
+        connectivity ? 503 : 502
+      );
+    }
+  }
+
+  async getSystemIdentity() {
+    const client = await this.connect();
+    try {
+      const menu = client.menu('/system identity');
+      const row = await menu.getOnly().catch(async () => {
+        const list = await menu.get();
+        return Array.isArray(list) ? list[0] : null;
+      });
+      return {
+        name: row?.name ?? null,
+      };
+    } catch (err) {
+      const message = err?.message ?? err;
+      if (isAuthError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_AUTH_FAILED', 'MikroTik authentication failed.', 502);
+      }
+      if (isTimeoutError(message)) {
+        throw new MikroTikRuntimeError('MIKROTIK_TIMEOUT', 'MikroTik request timed out.', 504);
+      }
+      const connectivity = isConnectivityError(message);
+      throw new MikroTikRuntimeError(
+        connectivity ? 'MIKROTIK_UNREACHABLE' : 'MIKROTIK_COMMAND_FAILED',
+        connectivity ? 'MikroTik is unreachable. Please try again shortly.' : 'MikroTik command failed.',
+        connectivity ? 503 : 502
+      );
+    }
+  }
 }
+
+// New required name (keep old export for backward-compatibility).
+export class MikroTikApiClient extends MikroTikRealApi8728Client {}

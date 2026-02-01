@@ -15,6 +15,12 @@ export function getMikroTikMockState() {
     },
   };
 
+  // Default bundle profiles expected by the runtime endpoints.
+  // These are read dynamically by the mock client (no backend hardcoding of bundles).
+  for (const name of ['12Hrs', '24Hrs', '7Days', '30d']) {
+    singleton.profiles.add(name);
+  }
+
   return singleton;
 }
 
