@@ -9,6 +9,7 @@ import {
 	postPortalBuyBundleHandler,
 	postPortalVoucherConnectHandler,
 	postPortalVoucherLoginHandler,
+	postPortalSessionDisconnectHandler,
 } from '../controllers/portalController.js';
 
 const router = Router();
@@ -28,6 +29,9 @@ router.post('/voucher-login', postPortalVoucherLoginHandler);
 
 // Voucher CONNECT flow (Phase G1.2)
 router.post('/voucher/connect', postPortalVoucherConnectHandler);
+
+// Session disconnect (mock/runtime parity)
+router.post('/session/disconnect', postPortalSessionDisconnectHandler);
 
 // Buy bundle (Phase G2.1 - mocked payment)
 router.post('/buy', postPortalBuyBundleHandler);

@@ -1,29 +1,49 @@
 import { query } from '../config/db.js';
 
-const FALLBACK_PACKAGES = [
-  { id: 1, name: '2 Hours Unlimited' },
-  { id: 2, name: 'Daily Plan' },
-];
+async function hasPublicTableColumn({ table, column }) {
+  const t = String(table ?? '').trim();
+  const c = String(column ?? '').trim();
+  if (!t || !c) return false;
+  const res = await query(
+    `
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = $1
+      AND column_name = $2
+    LIMIT 1
+    `,
+    [t, c]
+  );
+  return Boolean(res.rows?.[0]);
+}
 
 export async function listPackages(req, res) {
   try {
     console.info('GET /api/packages');
+
+
+    const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
+    const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
+
+    const whereActive = hasIsActive ? 'WHERE is_active = TRUE' : '';
+
     const result = await query(
       `
-      SELECT id::int AS id, name
+      SELECT id::int AS id,
+        name,
+        duration_minutes::int AS duration_minutes,
+        ${hasPriceUgx ? 'price_ugx::int AS price_ugx' : 'NULL::int AS price_ugx'},
+        ${hasIsActive ? 'is_active' : 'TRUE AS is_active'}
       FROM packages
-      ORDER BY id ASC
+      ${whereActive}
+      ORDER BY duration_minutes ASC, id ASC
       `
     );
 
     // Return a plain JSON array for simple clients.
     return res.status(200).json(result.rows);
   } catch (err) {
-    // If the DB is down, keep the app usable for basic UI flows.
-    if (err?.code === '28P01' || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
-      return res.status(200).json(FALLBACK_PACKAGES);
-    }
-
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
@@ -34,23 +54,31 @@ export async function listPackages(req, res) {
 export async function listPackagesFull(req, res) {
   try {
     console.info('GET /api/packages/full');
+
+    const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
+    const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
+
     const result = await query(
       `
-      SELECT id::int AS id, name, duration_minutes, mikrotik_profile, created_at
+      SELECT
+        id::int AS id,
+        name,
+        duration_minutes,
+        mikrotik_profile,
+        ${hasPriceUgx ? 'price_ugx::int AS price_ugx' : 'NULL::int AS price_ugx'},
+        ${hasIsActive ? 'is_active' : 'TRUE AS is_active'},
+        created_at
       FROM packages
-      ORDER BY created_at DESC
+      ORDER BY duration_minutes ASC, id ASC
       `
     );
 
     return res.status(200).json(result.rows);
   } catch (err) {
-    if (err?.code === '28P01' || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
-      return res.status(200).json([
-        { id: 1, name: '2 Hours Unlimited', duration_minutes: 120, mikrotik_profile: '2h-unlimited' },
-        { id: 2, name: 'Daily Plan', duration_minutes: 1440, mikrotik_profile: 'daily-plan' },
-      ]);
-    }
-
+    console.error('[Packages] listPackagesFull failed', {
+      code: err?.code ?? null,
+      message: err?.message ?? String(err),
+    });
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },

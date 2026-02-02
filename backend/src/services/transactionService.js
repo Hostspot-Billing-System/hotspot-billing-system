@@ -164,7 +164,7 @@ export class TransactionService {
         t.payment_method,
         t.created_at
       FROM transactions t
-      JOIN packages p ON p.id = t.bundle_id
+      LEFT JOIN packages p ON p.id = t.bundle_id
       WHERE t.id = $1
       `,
       [txId]

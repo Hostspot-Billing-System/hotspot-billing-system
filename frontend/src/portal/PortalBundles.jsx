@@ -1,13 +1,5 @@
 import React from 'react';
 
-const DEFAULT_BUNDLES = [
-	{ id: '2h', name: '2 Hours', price: 500, currency: 'UGX' },
-	{ id: '12h', name: '12 Hours', price: 1000, currency: 'UGX' },
-	{ id: 'daily', name: 'Daily', price: 1500, currency: 'UGX' },
-	{ id: 'weekly', name: 'Weekly', price: 6000, currency: 'UGX' },
-	{ id: 'monthly', name: 'Monthly', price: 23000, currency: 'UGX' },
-];
-
 function formatPrice(bundle) {
 	return `${bundle.price.toLocaleString()} ${bundle.currency}`;
 }
@@ -36,7 +28,7 @@ export default function PortalBundles({
 	selectedBundle,
 	onSelectBundle,
 	onBack,
-	bundles = DEFAULT_BUNDLES,
+	bundles = [],
 }) {
 	return (
 		<div className="p-6">

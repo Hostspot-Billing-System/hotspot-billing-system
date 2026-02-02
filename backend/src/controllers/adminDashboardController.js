@@ -17,11 +17,11 @@ export async function getAdminDashboardMetrics(req, res) {
       )
       SELECT
         (
-          SELECT COALESCE(SUM(le.amount_ugx), 0)::numeric(14,2)
-          FROM ledger_entries le
-          WHERE le.direction = 'credit'
-            AND le.source_type = 'transaction'
-            AND le.created_at >= (SELECT ts FROM today_start)
+          SELECT COALESCE(SUM(t.amount_ugx), 0)::numeric(14,2)
+          FROM transactions t
+          WHERE t.status = 'completed'
+            AND t.payment_method = 'MOBILE_MONEY'
+            AND t.created_at >= (SELECT ts FROM today_start)
         ) AS today_revenue_ugx,
 
         (
@@ -40,6 +40,7 @@ export async function getAdminDashboardMetrics(req, res) {
           SELECT COUNT(*)::int
           FROM transactions t
           WHERE t.status = 'failed'
+            AND t.payment_method = 'MOBILE_MONEY'
             AND t.created_at >= (SELECT ts FROM today_start)
         ) AS failed_transactions_today
       `
@@ -74,19 +75,11 @@ export async function getAdminDashboardRecentTransactions(req, res) {
         t.customer_phone,
         t.amount_ugx,
         t.status,
-        p.name AS bundle_name
+        t.failure_reason,
+        COALESCE(t.bundle_name, p.name) AS bundle_name
       FROM transactions t
-      JOIN packages p ON p.id = t.bundle_id
-      WHERE NOT (
-        -- Exclude test/system rows
-        t.reference ILIKE 'SMOKE-%'
-        OR t.reference ILIKE 'TEST-%'
-        OR COALESCE(t.payment_method, '') ILIKE 'system%'
-        OR COALESCE(t.payment_method, '') ILIKE 'internal%'
-        OR COALESCE(t.customer_phone, '') ILIKE 'system%'
-        OR COALESCE(t.customer_phone, '') ILIKE 'internal%'
-        OR (t.customer_phone IS NULL AND t.voucher_code IS NULL)
-      )
+      LEFT JOIN packages p ON p.id = t.bundle_id
+      WHERE t.payment_method = 'MOBILE_MONEY'
       ORDER BY t.created_at DESC, t.id DESC
       LIMIT 10
       `
@@ -99,6 +92,7 @@ export async function getAdminDashboardRecentTransactions(req, res) {
       amount_ugx: row.amount_ugx == null ? '0.00' : String(row.amount_ugx),
       status: row.status,
       bundle_name: row.bundle_name ?? null,
+      reason: row.failure_reason ?? null,
     }));
 
     return res.status(200).json({

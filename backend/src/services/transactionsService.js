@@ -46,18 +46,6 @@ async function hasPublicTableColumn(client, { table, column }) {
   return Boolean(res.rows?.[0]);
 }
 
-function mapDurationToPriceUgx(durationMinutes) {
-  const mins = Number(durationMinutes);
-  if (!Number.isFinite(mins) || mins <= 0) return null;
-  if (mins <= 60) return 500;
-  if (mins <= 120) return 1000;
-  if (mins <= 180) return 1500;
-  if (mins <= 360) return 2000;
-  if (mins <= 720) return 3000;
-  if (mins <= 1440) return 5000;
-  return 10000;
-}
-
 function normalizeText(value) {
   const trimmed = String(value ?? '').trim();
   return trimmed ? trimmed : null;
@@ -106,11 +94,107 @@ function normalizeStatus(value) {
   return lower;
 }
 
+function normalizeVoucherAttemptStatus(value) {
+  const s = normalizeText(value);
+  if (!s) return null;
+  const lower = s.toLowerCase();
+  if (lower !== 'success' && lower !== 'failed') {
+    throw new DomainError('BAD_REQUEST', `Invalid voucher attempt status: ${value}`, 400);
+  }
+  return lower;
+}
+
+function derivePackageKeyFromVoucherCode(voucherCode) {
+  const c = String(voucherCode ?? '').trim().toUpperCase();
+  if (!c) return null;
+  if (c.includes('2H')) return '2h';
+  if (c.includes('12H')) return '12h';
+  if (c.includes('DAILY')) return 'daily';
+  if (c.includes('WEEKLY')) return 'weekly';
+  if (c.includes('MONTHLY')) return 'monthly';
+  return null;
+}
+
+async function resolveBundleFromVoucherCodeTransactional(client, voucherCode) {
+  const code = normalizeText(voucherCode);
+  if (!code) return { bundle_id: null, duration_minutes: null, price_ugx: null };
+
+  // First try a real voucher row.
+  const hasPriceUgx = await hasPublicTableColumn(client, { table: 'packages', column: 'price_ugx' });
+  const res = await client.query(
+    `
+    SELECT v.package_id::int AS bundle_id,
+           p.duration_minutes::int AS duration_minutes,
+           ${hasPriceUgx ? 'p.price_ugx::int AS price_ugx' : 'NULL::int AS price_ugx'}
+    FROM vouchers v
+    JOIN packages p ON p.id = v.package_id
+    WHERE v.code = $1
+    LIMIT 1
+    `,
+    [code]
+  );
+
+  if (res.rows?.[0]) {
+    return {
+      bundle_id: res.rows[0].bundle_id ?? null,
+      duration_minutes: res.rows[0].duration_minutes ?? null,
+      price_ugx: res.rows[0].price_ugx ?? null,
+    };
+  }
+
+  // Fallback: if this looks like a seeded/mock voucher, map it to a package by name.
+  const key = derivePackageKeyFromVoucherCode(code);
+  if (!key) return { bundle_id: null, duration_minutes: null, price_ugx: null };
+
+  const namePattern =
+    key === '2h'
+      ? '%2 hour%'
+      : key === '12h'
+        ? '%12 hour%'
+        : key === 'daily'
+          ? '%daily%'
+          : key === 'weekly'
+            ? '%weekly%'
+            : key === 'monthly'
+              ? '%monthly%'
+              : null;
+
+  if (!namePattern) return { bundle_id: null, duration_minutes: null, price_ugx: null };
+
+  const pkgRes = await client.query(
+    `
+    SELECT p.id::int AS bundle_id,
+           p.duration_minutes::int AS duration_minutes,
+           ${hasPriceUgx ? 'p.price_ugx::int AS price_ugx' : 'NULL::int AS price_ugx'}
+    FROM packages p
+    WHERE LOWER(p.name) LIKE LOWER($1)
+    ORDER BY p.id ASC
+    LIMIT 1
+    `,
+    [namePattern]
+  );
+
+  const pkg = pkgRes.rows?.[0];
+  return {
+    bundle_id: pkg?.bundle_id ?? null,
+    duration_minutes: pkg?.duration_minutes ?? null,
+    price_ugx: pkg?.price_ugx ?? null,
+  };
+}
+
 function toIso(value) {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+function normalizeLegacyTransactionStatus(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return raw;
+  const lower = raw.toLowerCase();
+  if (lower === 'success') return 'completed';
+  return lower;
 }
 
 function mapTransactionRow(row) {
@@ -122,7 +206,7 @@ function mapTransactionRow(row) {
     amount_ugx: Number(row.amount_ugx ?? 0),
     commission_ugx: Number(row.commission_ugx ?? 0),
     net_amount_ugx: Number(row.net_amount_ugx ?? 0),
-    status: row.status,
+    status: normalizeLegacyTransactionStatus(row.status),
     payment_provider: row.payment_provider ?? 'NONE',
     created_at: toIso(row.created_at),
     paid_at: toIso(row.paid_at),
@@ -263,8 +347,13 @@ export class TransactionsService {
 		throw new DomainError('BUNDLE_INACTIVE', 'Bundle is inactive', 409);
 	}
 
-	const price = row.price_ugx ?? mapDurationToPriceUgx(row.duration_minutes);
-	if (price == null) throw new DomainError('BUNDLE_PRICE_MISSING', 'Bundle price is missing', 500);
+  if (!hasPriceUgx) {
+    throw new DomainError('BUNDLE_PRICE_MISSING', 'Bundle price is missing', 500);
+  }
+  const price = row.price_ugx == null ? null : Number(row.price_ugx);
+  if (price == null || !Number.isFinite(price) || price <= 0) {
+    throw new DomainError('BUNDLE_PRICE_MISSING', 'Bundle price is missing', 500);
+  }
 
 	return {
 		id: Number(row.id),
@@ -276,7 +365,7 @@ export class TransactionsService {
 
   static async createPendingPortalPaymentTransactionTransactional(
     client,
-    { portal_session_id, bundle_id, customer_phone, amount_ugx }
+    { portal_session_id, bundle_id, customer_phone, amount_ugx, payment_provider } = {}
   ) {
     const portalSessionId = parseOptionalPositiveInt(portal_session_id, 'portal_session_id');
     if (!portalSessionId) throw new DomainError('BAD_REQUEST', 'portal_session_id must be a valid number', 400);
@@ -288,6 +377,8 @@ export class TransactionsService {
     if (amount == null || amount <= 0) {
       throw new DomainError('BAD_REQUEST', 'amount_ugx must be a valid positive number', 400);
     }
+
+    const provider = this.normalizePaymentProvider(payment_provider ?? 'MTN');
 
     let reference = generateReference();
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -313,13 +404,13 @@ export class TransactionsService {
           NULL,
           'pending',
           'MOBILE_MONEY',
-          'NONE',
+          $6::payment_provider_enum,
           $5
         )
         ON CONFLICT (reference) DO NOTHING
         RETURNING id, reference
         `,
-        [reference, bundleId, phone, amount, portalSessionId]
+        [reference, bundleId, phone, amount, portalSessionId, provider]
       );
 
       if (res.rows?.[0]) {
@@ -332,11 +423,17 @@ export class TransactionsService {
     throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
   }
 
-  static async createPendingPortalBuyTransactionTransactional(client, { bundle_id, customer_phone }) {
+  static async createPendingPortalBuyTransactionTransactional(
+    client,
+    { bundle_id, customer_phone, amount_ugx, payment_provider } = {}
+  ) {
     const bundleId = parseOptionalPositiveInt(bundle_id, 'bundle_id');
     if (!bundleId) throw new DomainError('BAD_REQUEST', 'bundle_id must be a valid number', 400);
     const phone = normalizeText(customer_phone);
     if (!phone) throw new DomainError('BAD_REQUEST', 'customer_phone is required', 400);
+
+    const amount = parseOptionalNumber(amount_ugx, 'amount_ugx');
+    const provider = this.normalizePaymentProvider(payment_provider);
 
     let reference = generateReference();
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -358,17 +455,17 @@ export class TransactionsService {
           NULL,
           $2,
           $3,
-          NULL,
+          $4,
           NULL,
           'pending',
-          'PENDING_PAYMENT',
-          'NONE',
+          'MOBILE_MONEY',
+          $5::payment_provider_enum,
           NULL
         )
         ON CONFLICT (reference) DO NOTHING
         RETURNING id, reference
         `,
-        [reference, bundleId, phone]
+        [reference, bundleId, phone, amount, provider]
       );
 
       if (res.rows?.[0]) {
@@ -381,19 +478,44 @@ export class TransactionsService {
     throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
   }
 
-  static async markTransactionFailedByReference(reference, { failure_reason } = {}) {
+  static async markTransactionSuccessByReference(reference, { payment_provider } = {}) {
     const ref = normalizeText(reference);
     if (!ref) throw new DomainError('BAD_REQUEST', 'reference is required', 400);
+
+    const provider = this.normalizePaymentProvider(payment_provider);
+
+    await query(
+      `
+      UPDATE transactions
+      SET status = 'completed',
+        payment_method = COALESCE(payment_method, 'MOBILE_MONEY'),
+        payment_provider = $2::payment_provider_enum,
+        paid_at = COALESCE(paid_at, NOW()),
+        updated_at = NOW(),
+        failure_reason = NULL
+      WHERE reference = $1
+      `,
+      [ref, provider]
+    );
+  }
+
+  static async markTransactionFailedByReference(reference, { failure_reason, payment_provider } = {}) {
+    const ref = normalizeText(reference);
+    if (!ref) throw new DomainError('BAD_REQUEST', 'reference is required', 400);
+
+    const provider = this.normalizePaymentProvider(payment_provider);
 
     await query(
       `
       UPDATE transactions
       SET status = 'failed',
+        payment_method = COALESCE(payment_method, 'MOBILE_MONEY'),
+        payment_provider = $3::payment_provider_enum,
         failure_reason = LEFT($2, 255),
         updated_at = NOW()
       WHERE reference = $1
       `,
-      [ref, String(failure_reason ?? 'Payment initiation failed')]
+      [ref, String(failure_reason ?? 'Payment initiation failed'), provider]
     );
   }
 
@@ -547,7 +669,16 @@ export class TransactionsService {
     if (!row) throw new DomainError('BUNDLE_NOT_FOUND', 'Bundle not found', 404);
     return { id: Number(row.id), duration_minutes: Number(row.duration_minutes) };
   }
+
   static async createVoucherTransactionTransactional(client, { voucher_code, bundle_id, amount_ugx }) {
+	// Strict rule: voucher usage is NOT a financial transaction.
+	// Keep this method as a hard failure to prevent regressions.
+	void client;
+	void voucher_code;
+	void bundle_id;
+	void amount_ugx;
+	throw new DomainError('NOT_ALLOWED', 'Voucher actions must not create transactions', 409);
+
     const voucherCode = normalizeText(voucher_code);
     const bundleId = parseOptionalPositiveInt(bundle_id, 'bundle_id');
     if (!bundleId) {
@@ -572,7 +703,7 @@ export class TransactionsService {
         $4,
         $5,
         NULL,
-        'completed',
+        'success',
         'VOUCHER',
         'NONE'
       )
@@ -593,6 +724,117 @@ export class TransactionsService {
     }
 
     throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
+  }
+
+  static async createPortalVoucherAttemptTransactional(
+    client,
+    { voucher_code, bundle_id, amount_ugx, status, failure_reason } = {}
+  ) {
+	// Strict rule: voucher login/connect must not create any transactions.
+	void client;
+	void voucher_code;
+	void bundle_id;
+	void amount_ugx;
+	void status;
+	void failure_reason;
+	throw new DomainError('NOT_ALLOWED', 'Voucher actions must not create transactions', 409);
+
+    const voucherCode = normalizeText(voucher_code);
+    const bundleId = parseOptionalPositiveInt(bundle_id, 'bundle_id');
+    const st = normalizeVoucherAttemptStatus(status);
+    if (!st) throw new DomainError('BAD_REQUEST', 'status is required', 400);
+
+    const hasFailureReason = await hasPublicTableColumn(client, { table: 'transactions', column: 'failure_reason' });
+
+    const columns = [
+      'reference',
+      'voucher_code',
+      'bundle_id',
+      'customer_phone',
+      'amount_ugx',
+      'commission_ugx',
+      'status',
+      'payment_method',
+      'payment_provider',
+      hasFailureReason ? 'failure_reason' : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const values = [
+      '$1',
+      '$2',
+      '$3',
+      '$4',
+      '$5',
+      'NULL',
+      '$6',
+      '$7',
+      '$8',
+      hasFailureReason ? '$9' : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const insertSql = `
+      INSERT INTO transactions (${columns})
+      VALUES (${values})
+      ON CONFLICT (reference) DO NOTHING
+      RETURNING id, reference
+    `;
+
+    const reason = st === 'failed' ? normalizeText(failure_reason) ?? 'FAILED' : null;
+
+    let reference = generateReference();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const params = [reference, voucherCode, bundleId, '', amount_ugx, st, 'VOUCHER', 'NONE'];
+      if (hasFailureReason) params.push(reason);
+
+      const res = await client.query(insertSql, params);
+      if (res.rows?.[0]) {
+        return { id: Number(res.rows?.[0]?.id), reference: res.rows?.[0]?.reference ?? reference };
+      }
+      reference = generateReference();
+    }
+
+    throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
+  }
+
+  static async createPortalVoucherAttempt({ voucher_code, status, failure_reason } = {}) {
+  // Strict rule: voucher login/connect must not create any transactions.
+  void voucher_code;
+  void status;
+  void failure_reason;
+  throw new DomainError('NOT_ALLOWED', 'Voucher actions must not create transactions', 409);
+
+    const st = normalizeVoucherAttemptStatus(status);
+    if (!st) throw new DomainError('BAD_REQUEST', 'status is required', 400);
+
+    const { pool } = await import('../config/db.js');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const created = await this.createPortalVoucherAttemptTransactional(client, {
+        voucher_code,
+        bundle_id: null,
+        amount_ugx: null,
+        status: st,
+        failure_reason,
+      });
+
+      await client.query('COMMIT');
+      return created;
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   static async listTransactions(rawParams = {}) {
@@ -716,7 +958,7 @@ export class TransactionsService {
       amount_ugx: Number(r.amount_ugx ?? 0),
       commission_ugx: Number(r.commission_ugx ?? 0),
       net_amount_ugx: Number(r.net_amount_ugx ?? 0),
-      status: r.status,
+      status: normalizeLegacyTransactionStatus(r.status),
       provider: r.payment_provider ?? 'NONE',
     }));
   }

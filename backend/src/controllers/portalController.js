@@ -8,11 +8,121 @@ import {
 	activateMobileMoneyAccess,
 	activateVoucherAccess,
 	getActiveHotspotSessionForMac,
+	upsertRuntimeHotspotUser,
 } from '../services/mikrotikRuntimeService.js';
 import { mikrotikRuntimeService } from '../services/mikrotikRuntimeService.js';
 import { TransactionsService } from '../services/transactionsService.js';
 import { toHttpError as toMikroTikRuntimeHttpError } from '../services/mikrotikRuntime/errors.js';
 import { MobileMoneyService, toHttpError as toMobileMoneyHttpError } from '../services/mobileMoneyService.js';
+import { env } from '../config/env.js';
+import { mockRuntimeService } from '../services/MockRuntimeService.js';
+
+function isMockMode() {
+	const mode = String(env.MT_MODE ?? 'real').toLowerCase();
+	return Boolean(env.MIKROTIK_MOCK || mode === 'mock');
+}
+
+const OFFICIAL_BUNDLES = [
+	{ key: '2h', name: '2 Hours', duration_minutes: 120, price_ugx: 500, mikrotik_profile: '2h-unlimited' },
+	{ key: '12h', name: '12 Hours', duration_minutes: 720, price_ugx: 1000, mikrotik_profile: '12h-unlimited' },
+	{ key: 'daily', name: 'Daily', duration_minutes: 1440, price_ugx: 1500, mikrotik_profile: 'daily-unlimited' },
+	{ key: 'weekly', name: 'Weekly', duration_minutes: 10080, price_ugx: 6000, mikrotik_profile: 'weekly-unlimited' },
+	{ key: 'monthly', name: 'Monthly', duration_minutes: 43200, price_ugx: 23000, mikrotik_profile: 'monthly-unlimited' },
+];
+
+const OFFICIAL_BY_DURATION = new Map(OFFICIAL_BUNDLES.map((b) => [Number(b.duration_minutes), b]));
+
+function normalizePaymentProviderParam(value) {
+	const raw = String(value ?? '').trim().toUpperCase();
+	if (!raw) return 'MTN';
+	if (raw === 'MTN') return 'MTN';
+	if (raw === 'AIRTEL') return 'AIRTEL';
+	throw new PortalSessionError('BAD_REQUEST', 'payment_provider must be MTN or AIRTEL', 400);
+}
+
+function isDeterministicPaymentSuccess({ phone, bundleId, provider }) {
+	const input = `${String(phone ?? '').trim()}|${String(bundleId ?? '').trim()}|${String(provider ?? '').trim()}`;
+	const digest = crypto.createHash('sha256').update(input).digest();
+	// Deterministic ~90% success rate.
+	return digest[0] < 230;
+}
+
+async function hasPublicTableColumn({ table, column }) {
+	const t = String(table ?? '').trim();
+	const c = String(column ?? '').trim();
+	if (!t || !c) return false;
+	const res = await query(
+		`
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND table_name = $1
+		  AND column_name = $2
+		LIMIT 1
+		`,
+		[t, c]
+	);
+	return Boolean(res.rows?.[0]);
+}
+
+async function listPortalBundlesFromDb() {
+	const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
+	const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
+
+	const columns = [
+		'id::int AS id',
+		'name',
+		'duration_minutes::int AS duration_minutes',
+		'mikrotik_profile',
+		hasPriceUgx ? 'price_ugx::int AS price_ugx' : null,
+		hasIsActive ? 'is_active' : null,
+	]
+		.filter(Boolean)
+		.join(', ');
+
+	const where = hasIsActive ? 'WHERE is_active = true' : '';
+	const res = await query(
+		`
+		SELECT ${columns}
+		FROM packages
+		${where}
+		ORDER BY duration_minutes ASC, id ASC
+		`
+	);
+
+	const rows = res.rows ?? [];
+	const pickedByDuration = new Map();
+
+	for (const row of rows) {
+		const durationMinutes = row.duration_minutes == null ? null : Number(row.duration_minutes);
+		const official = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
+		if (!official) continue;
+
+		// If price_ugx exists and is set, enforce it matches the canonical price.
+		if (hasPriceUgx) {
+			const price = row.price_ugx == null ? null : Number(row.price_ugx);
+			if (price != null && Number.isFinite(price) && Number(price) !== Number(official.price_ugx)) {
+				throw new PortalSessionError('SERVER_MISCONFIG', `Bundle price mismatch for ${official.name}`, 500);
+			}
+		}
+
+		// Prefer the first row by ORDER BY duration,id.
+		if (pickedByDuration.has(Number(durationMinutes))) continue;
+		pickedByDuration.set(Number(durationMinutes), {
+			id: row.id == null ? null : Number(row.id),
+			name: String(row.name ?? '').trim() || official.name,
+			profile: row.mikrotik_profile,
+			mikrotik_profile: row.mikrotik_profile,
+			durationMinutes,
+			duration_minutes: durationMinutes,
+			price_ugx: Number(official.price_ugx),
+		});
+	}
+
+	// Return in canonical order, and tolerate partial DB config by returning only what exists.
+	// The portal UI will still show what's available instead of erroring.
+	return OFFICIAL_BUNDLES.map((b) => pickedByDuration.get(Number(b.duration_minutes)) ?? null).filter(Boolean);
+}
 
 function normalizePhoneE164ish(phone) {
 	const raw = String(phone ?? '').trim();
@@ -255,31 +365,37 @@ export async function getPortalContextHandler(req, res) {
 
 export async function getPortalBundlesHandler(_req, res) {
 	try {
-		const profiles = await mikrotikRuntimeService.listBundles();
-		const items = (Array.isArray(profiles) ? profiles : [])
-			.map((p) => {
-				const name = String(p?.name ?? '').trim();
-				if (!name) return null;
-				const rateLimit = String(p?.['rate-limit'] ?? p?.rateLimit ?? '').trim() || null;
+		// Bundles are a pricing/catalog concern. Do NOT depend on router availability.
+		const raw = await listPortalBundlesFromDb();
+		const bundles = (Array.isArray(raw) ? raw : [])
+			.map((b) => {
+				const id = b?.id == null ? null : Number(b.id);
+				const name = String(b?.name ?? '').trim();
+				if (!id || !name) return null;
+				const price = b?.price_ugx == null ? 0 : Number(b.price_ugx);
 				return {
-					id: name,
+					id: String(id),
 					name,
-					profile: name,
-					rateLimit,
+					price: Number.isFinite(price) ? price : 0,
+					currency: 'UGX',
+					duration_minutes: b?.duration_minutes == null ? null : Number(b.duration_minutes),
 				};
 			})
 			.filter(Boolean);
-
-		console.log(`[Portal Bundles] fetched ${items.length} bundles from MikroTik`);
-
-		// Public catalog data; short cache to reduce router load.
+		console.log('[PORTAL] Returning bundles (db)', bundles);
 		res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
-
-		// Per requirement: success returns a plain array.
-		return res.status(200).json(items);
+		return res.status(200).json({ success: true, bundles });
 	} catch (err) {
-		console.warn('[Portal Bundles] router offline', err?.code ?? '', err?.message ?? err);
-		return res.status(503).json({ success: false, error: 'Router offline' });
+		console.warn('[Portal Bundles] failed to load bundles from DB', err?.code ?? '', err?.message ?? err);
+		// Fallback: still return canonical bundles so the UI can render.
+		const bundles = OFFICIAL_BUNDLES.map((b) => ({
+			id: String(b.duration_minutes),
+			name: b.name,
+			price: b.price_ugx,
+			currency: 'UGX',
+			duration_minutes: b.duration_minutes,
+		}));
+		return res.status(200).json({ success: true, bundles });
 	}
 }
 
@@ -294,25 +410,37 @@ export async function getPortalHealthHandler(_req, res) {
 		db = { ok: false, error: err?.message ?? String(err) };
 	}
 
-	try {
-		const status = await mikrotikRuntimeService.health();
+	if (isMockMode()) {
+		const status = mockRuntimeService.health();
 		mikrotik = {
 			ok: status?.status === 'online',
 			status: status?.status ?? 'offline',
-			identity: status?.identity ?? null,
-			mode: status?.mode ?? 'real',
-			error: status?.error ?? null,
-			code: status?.code ?? null,
+			identity: status?.identity ?? 'mikrotik-mock',
+			mode: status?.mode ?? 'mock',
+			error: null,
+			code: null,
 		};
-	} catch (err) {
-		mikrotik = {
-			ok: false,
-			status: 'offline',
-			identity: null,
-			mode: 'real',
-			error: err?.message ?? String(err),
-			code: err?.code ?? null,
-		};
+	} else {
+		try {
+			const status = await mikrotikRuntimeService.health();
+			mikrotik = {
+				ok: status?.status === 'online',
+				status: status?.status ?? 'offline',
+				identity: status?.identity ?? null,
+				mode: status?.mode ?? 'real',
+				error: status?.error ?? null,
+				code: status?.code ?? null,
+			};
+		} catch (err) {
+			mikrotik = {
+				ok: false,
+				status: 'offline',
+				identity: null,
+				mode: 'real',
+				error: err?.message ?? String(err),
+				code: err?.code ?? null,
+			};
+		}
 	}
 
 	const ok = Boolean(db.ok && mikrotik.ok);
@@ -411,18 +539,14 @@ export async function postPortalVoucherLoginHandler(req, res) {
 			durationMinutes: redeemed.voucher.package.duration_minutes,
 		});
 
-		const tx = await TransactionsService.createVoucherTransactionTransactional(client, {
-			voucher_code: redeemed.voucher.code,
-			bundle_id: redeemed.voucher.package.id,
-			amount_ugx: null,
-		});
+		// STRICT RULE: voucher login is NOT a financial transaction.
+		// Do NOT create any rows in `transactions` for voucher-based access.
 
 		await client.query('COMMIT');
 
 		return res.status(200).json({
 			success: true,
 			data: {
-				transaction_reference: tx.reference,
 				voucher_code: redeemed.voucher.code,
 				expires_at: redeemed.voucher.expires_at ?? null,
 				bundle: redeemed.voucher.package,
@@ -508,10 +632,12 @@ export async function postPortalVoucherConnectHandler(req, res) {
 			});
 		}
 
-		// Verify router connectivity before doing any voucher work.
-		const mt = await mikrotikRuntimeService.health();
-		if (mt?.status !== 'online') {
-			throw new PortalSessionError('ROUTER_OFFLINE', 'Router offline', 503);
+		// Real mode: verify router connectivity before doing any voucher work.
+		if (!isMockMode()) {
+			const mt = await mikrotikRuntimeService.health();
+			if (mt?.status !== 'online') {
+				throw new PortalSessionError('ROUTER_OFFLINE', 'Router offline', 503);
+			}
 		}
 
 		client = await pool.connect();
@@ -555,17 +681,27 @@ export async function postPortalVoucherConnectHandler(req, res) {
 			throw new PortalSessionError('SERVER_MISCONFIG', 'Voucher is missing MikroTik profile', 500);
 		}
 
-		// Provision the hotspot user on MikroTik. If this fails, DB changes roll back.
-		await mikrotikRuntimeService.createVoucher({ code: row.code, profile });
-		console.log('[PortalVoucherConnect] hotspot user created', { username: row.code, profile });
+		if (isMockMode()) {
+			// Mock mode: skip router calls; still activate access via runtime mock.
+			await activateVoucherAccess({
+				voucherCode: row.code,
+				bundleId: row.package_id,
+				durationMinutes: row.duration_minutes,
+			});
+			console.log('[PortalVoucherConnect] mock access activated', {
+				username: row.code,
+				bundle_id: row.package_id,
+			});
+		} else {
+			// Real mode: provision the hotspot user on MikroTik. If this fails, DB changes roll back.
+			await mikrotikRuntimeService.createVoucher({ code: row.code, profile });
+			console.log('[PortalVoucherConnect] hotspot user created', { username: row.code, profile });
+		}
 
 		await VoucherService.markVoucherAsUsedTransactional(client, row.id);
 		console.log('[PortalVoucherConnect] voucher used', { voucher: row.code });
-		await TransactionsService.createVoucherTransactionTransactional(client, {
-			voucher_code: row.code,
-			bundle_id: row.package_id,
-			amount_ugx: null,
-		});
+		// STRICT RULE: voucher connect is NOT a financial transaction.
+		// Do NOT create any rows in `transactions` for voucher-based access.
 		console.log('[PortalVoucherConnect] bundle assigned', { voucher: row.code, bundle_id: row.package_id, profile });
 
 		const durationMinutes = row?.duration_minutes == null ? null : Number(row.duration_minutes);
@@ -577,6 +713,7 @@ export async function postPortalVoucherConnectHandler(req, res) {
 		await client.query('COMMIT');
 		return res.status(200).json({
 			success: true,
+			message: 'Voucher accepted',
 			data: {
 				durationMinutes: durationMinutes != null && Number.isFinite(durationMinutes) ? durationMinutes : null,
 				expiresAt,
@@ -596,7 +733,10 @@ export async function postPortalVoucherConnectHandler(req, res) {
 			const http = mikrotikCode === 'MIKROTIK_TIMEOUT' ? 504 : 502;
 			return res.status(http).json({
 				success: false,
-				error: err?.message ? `MikroTik error: ${err.message}` : 'MikroTik error',
+				error: {
+					code: mikrotikCode || 'MIKROTIK_ERROR',
+					message: err?.message ? `MikroTik error: ${err.message}` : 'MikroTik error',
+				},
 			});
 		}
 
@@ -604,18 +744,27 @@ export async function postPortalVoucherConnectHandler(req, res) {
 		const voucherErrCode = String(voucherHttp?.body?.error?.code ?? '');
 		if (voucherErrCode) {
 			if (voucherErrCode === 'VOUCHER_NOT_FOUND') {
-				return res.status(404).json({ success: false, error: 'Invalid voucher' });
+				return res.status(404).json({
+					success: false,
+					error: { code: 'INVALID', message: 'Invalid voucher' },
+				});
 			}
 			if (voucherErrCode === 'VOUCHER_USED') {
-				return res.status(409).json({ success: false, error: 'Voucher already used' });
+				return res.status(409).json({
+					success: false,
+					error: { code: 'USED', message: 'Voucher already used' },
+				});
 			}
 			if (voucherErrCode === 'VOUCHER_EXPIRED') {
-				return res.status(410).json({ success: false, error: 'Voucher expired' });
+				return res.status(410).json({
+					success: false,
+					error: { code: 'EXPIRED', message: 'Voucher expired' },
+				});
 			}
 			if (voucherErrCode === 'BAD_REQUEST') {
 				return res.status(400).json({
 					success: false,
-					error: voucherHttp?.body?.error?.message ?? 'Bad request',
+					error: { code: 'BAD_REQUEST', message: voucherHttp?.body?.error?.message ?? 'Bad request' },
 				});
 			}
 		}
@@ -625,13 +774,16 @@ export async function postPortalVoucherConnectHandler(req, res) {
 		if (mtCode && mtCode !== 'INTERNAL_ERROR') {
 			// Keep portal spec readable.
 			const message = mtHttp?.body?.error?.message ?? 'MikroTik error';
-			return res.status(mtHttp.httpStatus ?? 502).json({ success: false, error: message });
+			return res.status(mtHttp.httpStatus ?? 502).json({
+				success: false,
+				error: { code: mtCode, message },
+			});
 		}
 
 		if (err instanceof PortalSessionError) {
 			return res.status(err.httpStatus).json({
 				success: false,
-				error: err.message,
+				error: { code: err.code, message: err.message },
 			});
 		}
 
@@ -640,9 +792,75 @@ export async function postPortalVoucherConnectHandler(req, res) {
 			code: err?.code ?? null,
 		});
 
-		return res.status(500).json({ success: false, error: 'Internal server error' });
+		return res.status(500).json({
+			success: false,
+			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+		});
 	} finally {
 		if (client) client.release();
+	}
+}
+
+export async function postPortalSessionDisconnectHandler(req, res) {
+	try {
+		if (isMockMode()) {
+			const data = await mockRuntimeService.disconnectSession();
+			return res.status(200).json({
+				success: true,
+				message: 'Session disconnected',
+				data: data ?? { disconnected: true },
+			});
+		}
+
+		const usernameRaw = String(req.body?.username ?? '').trim();
+		if (usernameRaw) {
+			await mikrotikRuntimeService.disconnectUser(usernameRaw);
+			return res.status(200).json({
+				success: true,
+				message: 'Session disconnected',
+				data: { disconnected: true },
+			});
+		}
+
+		const mac = req.body?.mac ?? req.query?.mac;
+		const ip = req.body?.ip ?? req.query?.ip;
+		const session = await requirePortalSession({ mac, ip });
+		const macUser = String(session.mac ?? '')
+			.trim()
+			.toUpperCase()
+			.replace(/[^0-9A-F]/g, '');
+		if (!macUser) {
+			throw new PortalSessionError('BAD_REQUEST', 'mac is required', 400);
+		}
+
+		await mikrotikRuntimeService.disconnectUser(macUser);
+		return res.status(200).json({
+			success: true,
+			message: 'Session disconnected',
+			data: { disconnected: true },
+		});
+	} catch (err) {
+		const mtHttp = toMikroTikRuntimeHttpError(err);
+		const mtCode = String(mtHttp?.body?.error?.code ?? '');
+		if (mtCode && mtCode !== 'INTERNAL_ERROR') {
+			const message = mtHttp?.body?.error?.message ?? 'MikroTik error';
+			return res.status(mtHttp.httpStatus ?? 502).json({
+				success: false,
+				error: { code: mtCode, message },
+			});
+		}
+
+		if (err instanceof PortalSessionError) {
+			return res.status(err.httpStatus).json({
+				success: false,
+				error: { code: err.code, message: err.message },
+			});
+		}
+
+		return res.status(500).json({
+			success: false,
+			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+		});
 	}
 }
 
@@ -651,89 +869,162 @@ export async function postPortalBuyBundleHandler(req, res) {
 	let createdUsername = null;
 	try {
 		const phone = normalizePhoneE164ish(req.body?.phone);
-		const requestedBundle = normalizeBundleName(req.body?.bundle);
-
-		// Verify router connectivity before provisioning users.
-		const mt = await mikrotikRuntimeService.health();
-		if (mt?.status !== 'online') {
-			throw new PortalSessionError('ROUTER_OFFLINE', 'Router offline', 503);
-		}
-
-		// Validate bundle exists on MikroTik (live).
-		const profiles = await mikrotikRuntimeService.listBundles();
-		const profileRow = (Array.isArray(profiles) ? profiles : []).find(
-			(p) => String(p?.name ?? '').trim().toLowerCase() === requestedBundle.toLowerCase()
+		const paymentProvider = normalizePaymentProviderParam(
+			req.body?.payment_provider ?? req.body?.provider ?? req.body?.paymentProvider
 		);
-		if (!profileRow) {
-			return res.status(404).json({ success: false, error: 'Invalid bundle' });
+		const requestedBundle = req.body?.bundle;
+		const bundleIdRaw = req.body?.bundle_id ?? req.body?.bundleId;
+
+		if (!isMockMode()) {
+			throw new PortalSessionError('NOT_IMPLEMENTED', 'Real payments must use /api/portal/pay', 501);
 		}
-		const profileName = String(profileRow?.name ?? '').trim();
 
-		// Generate credentials.
-		const username = `U${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-		const password = crypto.randomBytes(5).toString('hex').toUpperCase();
-		createdUsername = username;
+		const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
+		const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
+		if (!hasPriceUgx) {
+			throw new PortalSessionError(
+				'SERVER_MISCONFIG',
+				'Bundle pricing is not configured (missing packages.price_ugx)',
+				500
+			);
+		}
 
-		// Provision hotspot user on MikroTik.
-		await mikrotikRuntimeService.createUser({ username, password, profile: profileName });
-		console.log('[PortalBuy] hotspot user created', { username, profile: profileName });
-
-		// Ensure we can log against the packages FK.
 		dbClient = await pool.connect();
 		await dbClient.query('BEGIN');
 
 		let packageRow = null;
-		{
-			const r = await dbClient.query(
-				'\n\t\t\tSELECT id, name, duration_minutes, mikrotik_profile\n\t\t\tFROM packages\n\t\t\tWHERE mikrotik_profile = $1 OR name = $1\n\t\t\tLIMIT 1\n\t\t\t',
-				[profileName]
-			);
-			packageRow = r.rows?.[0] ?? null;
-		}
-
-		if (!packageRow) {
-			const durationMinutes = parseDurationMinutesFromProfileName(profileName);
-			if (!durationMinutes) {
-				throw new PortalSessionError(
-					'BUNDLE_NOT_CONFIGURED',
-					'Bundle exists on router but is not configured in billing DB (cannot infer duration)',
-					409
-				);
+		if (bundleIdRaw != null && String(bundleIdRaw).trim() !== '') {
+			const idNum = Number(String(bundleIdRaw).trim());
+			if (!Number.isFinite(idNum) || idNum <= 0) {
+				throw new PortalSessionError('BAD_REQUEST', 'bundle_id must be a valid number', 400);
 			}
 
-			const inserted = await dbClient.query(
+			const whereActive = hasIsActive ? 'AND is_active = TRUE' : '';
+			const resPkg = await dbClient.query(
 				`
-				INSERT INTO packages (name, duration_minutes, mikrotik_profile)
-				VALUES ($1, $2, $3)
-				ON CONFLICT (name) DO UPDATE SET mikrotik_profile = EXCLUDED.mikrotik_profile
-				RETURNING id, name, duration_minutes, mikrotik_profile
+				SELECT
+					id::int AS id,
+					name,
+					duration_minutes::int AS duration_minutes,
+					mikrotik_profile,
+					price_ugx::int AS price_ugx
+				FROM packages
+				WHERE id = $1::bigint
+				${whereActive}
+				LIMIT 1
 				`,
-				[profileName, durationMinutes, profileName]
+				[Math.floor(idNum)]
 			);
-			packageRow = inserted.rows?.[0] ?? null;
+			packageRow = resPkg.rows?.[0] ?? null;
+		} else {
+			const wanted = normalizeBundleName(requestedBundle);
+			const whereActive = hasIsActive ? 'AND is_active = TRUE' : '';
+			const resPkg = await dbClient.query(
+				`
+				SELECT
+					id::int AS id,
+					name,
+					duration_minutes::int AS duration_minutes,
+					mikrotik_profile,
+					price_ugx::int AS price_ugx
+				FROM packages
+				WHERE (
+					LOWER(name) = LOWER($1)
+					OR LOWER(mikrotik_profile) = LOWER($1)
+					OR id::text = $1
+				)
+				${whereActive}
+				LIMIT 1
+				`,
+				[wanted]
+			);
+			packageRow = resPkg.rows?.[0] ?? null;
 		}
 
 		if (!packageRow?.id) {
-			throw new PortalSessionError('INTERNAL_ERROR', 'Failed to resolve bundle package mapping', 500);
+			throw new PortalSessionError('BUNDLE_NOT_FOUND', 'Invalid bundle', 404);
+		}
+
+		const durationMinutes = Number(packageRow.duration_minutes ?? 0);
+		if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+			throw new PortalSessionError('BUNDLE_NOT_CONFIGURED', 'Bundle duration is missing', 409);
+		}
+		const official = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
+		if (!official) {
+			throw new PortalSessionError('BUNDLE_NOT_FOUND', 'Invalid bundle', 404);
+		}
+		const priceUgx = packageRow.price_ugx == null ? null : Number(packageRow.price_ugx);
+		if (priceUgx == null || !Number.isFinite(priceUgx)) {
+			throw new PortalSessionError('BUNDLE_NOT_CONFIGURED', 'Bundle price is missing', 409);
+		}
+		if (Number(priceUgx) !== Number(official.price_ugx)) {
+			throw new PortalSessionError('BUNDLE_NOT_CONFIGURED', 'Bundle price mismatch', 409);
 		}
 
 		const tx = await TransactionsService.createPendingPortalBuyTransactionTransactional(dbClient, {
 			bundle_id: Number(packageRow.id),
 			customer_phone: phone,
+			amount_ugx: Number(priceUgx),
+			payment_provider: paymentProvider,
 		});
-		console.log('[PortalBuy] transaction pending_payment logged', {
-			reference: tx?.reference ?? null,
+
+		const paymentOk = isDeterministicPaymentSuccess({
 			phone,
-			bundle: profileName,
+			bundleId: packageRow.id,
+			provider: paymentProvider,
 		});
-		console.log('[PortalBuy] bundle assigned', { username, bundle_id: Number(packageRow.id), profile: profileName });
+		if (!paymentOk) {
+			await TransactionsService.markTransactionFailedTransactional(dbClient, tx.reference, {
+				failure_reason: 'DETERMINISTIC_PAYMENT_FAILED',
+				payment_provider: paymentProvider,
+			});
+			await dbClient.query('COMMIT');
+			dbClient.release();
+			dbClient = null;
+			return res.status(402).json({
+				success: false,
+				error: { code: 'PAYMENT_FAILED', message: 'Payment failed. Please try again.' },
+			});
+		}
+
+		const username = `U${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+		const password = crypto.randomBytes(5).toString('hex').toUpperCase();
+		createdUsername = username;
+
+		try {
+			await upsertRuntimeHotspotUser({
+				username,
+				password,
+				profile: `hotspot_${Number(packageRow.id)}`,
+				limit_uptime: `${Math.floor(durationMinutes)}m`,
+				disabled: false,
+			});
+		} catch (err) {
+			await TransactionsService.markTransactionFailedTransactional(dbClient, tx.reference, {
+				failure_reason: err?.code ? `PROVISION_FAILED:${String(err.code)}` : 'PROVISION_FAILED',
+				payment_provider: paymentProvider,
+			});
+			await dbClient.query('COMMIT');
+			dbClient.release();
+			dbClient = null;
+			throw new PortalSessionError('PROVISION_FAILED', 'Failed to provision hotspot user', 502);
+		}
+
+		await TransactionsService.markTransactionCompletedTransactional(dbClient, tx.reference, {
+			payment_provider: paymentProvider,
+		});
 
 		await dbClient.query('COMMIT');
+		dbClient.release();
+		dbClient = null;
 
 		return res.status(200).json({
 			success: true,
-			username,
-			password,
+			data: {
+				transaction_reference: tx.reference,
+				username,
+				password,
+			},
 		});
 	} catch (err) {
 		if (dbClient) {
@@ -746,7 +1037,6 @@ export async function postPortalBuyBundleHandler(req, res) {
 
 		const mikrotikCode = String(err?.code ?? '');
 		if (mikrotikCode.startsWith('MIKROTIK_')) {
-			// Best-effort cleanup if we already created a user.
 			if (createdUsername) {
 				try {
 					await mikrotikRuntimeService.removeUser(createdUsername);
@@ -757,12 +1047,15 @@ export async function postPortalBuyBundleHandler(req, res) {
 			const http = mikrotikCode === 'MIKROTIK_TIMEOUT' ? 504 : 502;
 			return res.status(http).json({
 				success: false,
-				error: err?.message ? `MikroTik error: ${err.message}` : 'MikroTik error',
+				error: { code: mikrotikCode, message: err?.message ?? 'MikroTik error' },
 			});
 		}
 
 		if (err instanceof PortalSessionError) {
-			return res.status(err.httpStatus).json({ success: false, error: err.message });
+			return res.status(err.httpStatus).json({
+				success: false,
+				error: { code: err.code, message: err.message },
+			});
 		}
 
 		console.error('[PortalBuy] unexpected error', {
@@ -770,7 +1063,10 @@ export async function postPortalBuyBundleHandler(req, res) {
 			code: err?.code ?? null,
 		});
 
-		return res.status(500).json({ success: false, error: 'Internal server error' });
+		return res.status(500).json({
+			success: false,
+			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+		});
 	} finally {
 		if (dbClient) dbClient.release();
 	}
@@ -786,6 +1082,9 @@ export async function postPortalPayHandler(req, res) {
 
 		const session = await requirePortalSession({ mac, ip });
 		const msisdn = normalizePhoneE164ish(phone);
+		const paymentProvider = normalizePaymentProviderParam(
+			req.body?.payment_provider ?? req.body?.provider ?? req.body?.paymentProvider
+		);
 
 		client = await pool.connect();
 		await client.query('BEGIN');
@@ -805,6 +1104,7 @@ export async function postPortalPayHandler(req, res) {
 			bundle_id: bundle.id,
 			customer_phone: msisdn,
 			amount_ugx: bundle.price_ugx,
+			payment_provider: paymentProvider,
 		});
 
 		await client.query('COMMIT');
@@ -822,6 +1122,7 @@ export async function postPortalPayHandler(req, res) {
 			// Best-effort mark as failed so user can retry.
 			await TransactionsService.markTransactionFailedByReference(tx.reference, {
 				failure_reason: err?.message ?? 'Payment initiation failed',
+				payment_provider: paymentProvider,
 			});
 
 			const mmHttp = toMobileMoneyHttpError(err);

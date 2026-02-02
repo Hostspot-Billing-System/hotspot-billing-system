@@ -34,7 +34,7 @@ export default function PortalSuccess({ onDone }) {
 			<button
 				type="button"
 				onClick={onDone}
-				className="mt-6 w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white shadow-sm ring-1 ring-white/10 transition hover:bg-white/15"
+				className="mt-6 w-full rounded-xl bg-white/10 px-4 py-3 text-[16px] font-semibold text-white shadow-sm ring-1 ring-white/10 transition hover:bg-white/15 active:scale-[0.99]"
 			>
 				Done
 			</button>

@@ -89,6 +89,9 @@ export async function listAdminTransactions(req, res) {
     const conditions = [];
     const params = [];
 
+    // Strict rule: admin transactions represent mobile money only.
+    conditions.push(`t.payment_method = 'MOBILE_MONEY'`);
+
     if (q) {
       params.push(`%${q}%`);
       const idx = params.length;
@@ -149,7 +152,7 @@ export async function listAdminTransactions(req, res) {
       `
       SELECT COUNT(*)::int AS total
       FROM transactions t
-      JOIN packages p ON p.id = t.bundle_id
+      LEFT JOIN packages p ON p.id = t.bundle_id
       ${whereSql}
       `,
       params
@@ -176,7 +179,7 @@ export async function listAdminTransactions(req, res) {
         t.created_at,
         t.paid_at
       FROM transactions t
-      JOIN packages p ON p.id = t.bundle_id
+      LEFT JOIN packages p ON p.id = t.bundle_id
       ${whereSql}
       ORDER BY t.created_at DESC, t.id DESC
       LIMIT $${limitParam} OFFSET $${offsetParam}
@@ -188,7 +191,7 @@ export async function listAdminTransactions(req, res) {
       id: Number(row.id),
       reference: row.reference,
       customer_phone: row.customer_phone ?? null,
-      bundle_id: Number(row.bundle_id),
+      bundle_id: row.bundle_id == null ? null : Number(row.bundle_id),
       bundle_name: row.bundle_name ?? null,
       amount_ugx: Number(row.amount_ugx ?? 0),
       status: row.status,

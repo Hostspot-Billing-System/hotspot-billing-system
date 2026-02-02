@@ -13,7 +13,67 @@ body {
 	overflow-x: hidden;
 }
 
+@keyframes portalFadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes portalPop {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+.portal-fade-in {
+	animation: portalFadeIn 180ms ease-out both;
+}
+
+.portal-pop {
+	animation: portalPop 260ms ease-out both;
+}
+
 #root {
 	font-family: inherit;
 	min-height: 100vh;
+}
+
+.bundle-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 12px;
+	margin-top: 16px;
+}
+
+.bundle-card {
+	background: rgba(255, 255, 255, 0.1);
+	color: white;
+	padding: 12px;
+	border-radius: 10px;
+	border: none;
+	cursor: pointer;
+}
+
+.bundle-card:active {
+	transform: scale(0.99);
+}
+
+.bundle-name {
+	font-weight: 800;
+	font-size: 14px;
+}
+
+.bundle-price {
+	margin-top: 6px;
+	font-weight: 800;
+	font-size: 12px;
+	opacity: 0.85;
 }

@@ -19,6 +19,13 @@ function unwrapSuccess(responseData) {
 }
 
 export function getApiErrorMessage(err) {
+	const code = String(err?.code ?? err?.response?.data?.error?.code ?? '').trim().toUpperCase();
+	if (code === 'EXPIRED' || code === 'VOUCHER_EXPIRED') return 'Expired';
+	if (code === 'USED' || code === 'VOUCHER_USED') return 'Voucher already used';
+	if (code === 'INVALID' || code === 'VOUCHER_NOT_FOUND') return 'Invalid voucher';
+
+	const backendError = err?.response?.data?.error;
+	if (typeof backendError === 'string' && backendError.trim()) return backendError;
 	return (
 		err?.response?.data?.error?.message ||
 		err?.response?.data?.message ||
@@ -34,7 +41,11 @@ export async function fetchPortalContext(params) {
 
 export async function fetchPortalBundles() {
 	const res = await api.get('/api/portal/bundles');
-	return unwrapSuccess(res.data);
+	const data = res.data;
+	if (data && typeof data === 'object' && data.success === true && Array.isArray(data.bundles)) {
+		return data.bundles;
+	}
+	return unwrapSuccess(data);
 }
 
 export async function voucherLogin({ mac, ip, voucher_code }) {
@@ -48,11 +59,13 @@ export async function voucherConnect({ voucher }) {
 }
 
 export async function createPortalPaymentIntent({ mac, ip, phone, bundle_id }) {
-	const res = await api.post('/api/portal/pay', { mac, ip, phone, bundle_id });
+	const res = await api.post('/api/portal/pay', { mac, ip, phone, bundle_id, payment_provider: 'MTN' });
 	return unwrapSuccess(res.data);
 }
 
-export async function buyBundle({ phone, bundle }) {
-	const res = await api.post('/api/portal/buy', { phone, bundle });
+
+export async function buyBundle({ phone, bundle_id, bundleId } = {}) {
+	const effectiveBundleId = bundle_id ?? bundleId;
+	const res = await api.post('/api/portal/buy', { phone, bundle_id: effectiveBundleId, payment_provider: 'MTN' });
 	return unwrapSuccess(res.data);
 }

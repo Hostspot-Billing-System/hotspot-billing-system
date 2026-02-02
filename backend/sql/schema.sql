@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS packages (
   name             TEXT NOT NULL,
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
   mikrotik_profile TEXT NOT NULL,
+  price_ugx         INTEGER NULL,
+  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
   CONSTRAINT packages_name_unique UNIQUE (name)

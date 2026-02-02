@@ -113,6 +113,40 @@ async function main() {
   // That migration defines an enum-based schema that can conflict with the current
   // varchar-based withdrawals.status used by the code.
 
+  // 4) transactions: allow voucher-attempt logging (status=success + nullable bundle_id)
+  if (await tableExists('transactions')) {
+    const bundleNullableRes = await pool.query(
+      `
+      SELECT is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'transactions'
+        AND column_name = 'bundle_id'
+      LIMIT 1
+      `
+    );
+    const bundleIsNullable = String(bundleNullableRes.rows?.[0]?.is_nullable ?? 'NO') === 'YES';
+
+    const statusConstraintRes = await pool.query(
+      `
+      SELECT pg_get_constraintdef(c.oid) AS def
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'transactions'
+        AND c.conname = 'transactions_status_valid'
+      LIMIT 1
+      `
+    );
+    const def = String(statusConstraintRes.rows?.[0]?.def ?? '');
+    const allowsSuccess = def.includes("'success'");
+
+    if (!bundleIsNullable || !allowsSuccess) {
+      await applySqlFile('../sql/migrations/20260202_001_transactions_voucher_attempts.sql');
+    }
+  } else {
+    console.warn("Table 'transactions' not found. Skipping transactions migrations.");
+  }
+
   console.log('Missing migrations check: done');
 }
 

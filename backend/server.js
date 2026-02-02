@@ -1,7 +1,7 @@
 import app from "./src/app.js";
 import "./src/config/env.js";
 import { env } from "./src/config/env.js";
-import { checkDbConnection, seedDefaultPackagesIfEmpty } from "./src/config/db.js";
+import { checkDbConnection } from "./src/config/db.js";
 import { startMikroTikExpiryCron } from './src/services/mikrotikExpiryService.js';
 import { getRuntimeHealth } from './src/services/mikrotikRuntimeService.js';
 
@@ -12,7 +12,6 @@ if (env.MIKROTIK_MOCK) {
 async function start() {
   try {
     await checkDbConnection();
-    await seedDefaultPackagesIfEmpty();
     console.log('Database connection: ok');
   } catch (err) {
     console.warn('Database connection: failed. Backend will start in degraded mode.');
