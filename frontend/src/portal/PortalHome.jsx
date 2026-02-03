@@ -5,7 +5,6 @@ import PortalSuccess from './PortalSuccess.jsx';
 import {
 	buyBundle,
 	fetchPortalBundles,
-	getApiErrorMessage,
 	voucherConnect,
 } from '../services/portal.js';
 import mtnLogo from '../assets/mtn.png';
@@ -31,16 +30,6 @@ function formatDurationLabelFromMinutes(durationMinutes) {
 		return hours === 1 ? '1 Hour' : `${hours} Hours`;
 	}
 	return `${mins} Minutes`;
-}
-
-function formatCountdown(totalSeconds) {
-	const s = toInt(totalSeconds);
-	if (s == null || s < 0) return '0:00';
-	const hours = Math.floor(s / 3600);
-	const minutes = Math.floor((s % 3600) / 60);
-	const seconds = s % 60;
-	if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-	return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function formatPriceUGX(value) {
@@ -119,8 +108,7 @@ export default function PortalHome() {
 	const [bundlesError, setBundlesError] = React.useState('');
 	const [voucherError, setVoucherError] = React.useState('');
 	const [voucherSuccess, setVoucherSuccess] = React.useState(null);
-	const [voucherExpiredMessage, setVoucherExpiredMessage] = React.useState('');
-	const [voucherCountdownSeconds, setVoucherCountdownSeconds] = React.useState(null);
+	const [buyCountdownSeconds, setBuyCountdownSeconds] = React.useState(null);
 	const [buyError, setBuyError] = React.useState('');
 	const [buyResult, setBuyResult] = React.useState(null);
 	const [isLoadingBundles, setIsLoadingBundles] = React.useState(false);
@@ -129,10 +117,9 @@ export default function PortalHome() {
 	const [showSuccessOverlay, setShowSuccessOverlay] = React.useState(false);
 	const [successAutoCloseSeconds, setSuccessAutoCloseSeconds] = React.useState(null);
 	const inFlightRef = React.useRef({ voucher: false, pay: false, context: false, bundles: false });
-	const voucherTimerRef = React.useRef(null);
-	const voucherExpiresAtMsRef = React.useRef(null);
+	const buyCountdownTimerRef = React.useRef(null);
 		const voucherInputRef = React.useRef(null);
-		const voucherConnectError = voucherError || voucherExpiredMessage;
+		const voucherConnectError = voucherError;
 
 	const loadBundles = React.useCallback(async () => {
 		if (inFlightRef.current.bundles) return;
@@ -144,7 +131,7 @@ export default function PortalHome() {
 			setBundles(Array.isArray(list) ? list : []);
 		} catch (err) {
 			setBundles([]);
-			setBundlesError(getApiErrorMessage(err) || 'Failed to load bundles');
+			setBundlesError(err?.response?.data?.error || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.bundles = false;
 			setIsLoadingBundles(false);
@@ -152,13 +139,26 @@ export default function PortalHome() {
 	}, [inFlightRef]);
 
 	React.useEffect(() => {
+		if (!isBuying) return;
+		setBuyCountdownSeconds(12);
+		if (buyCountdownTimerRef.current) {
+			clearInterval(buyCountdownTimerRef.current);
+			buyCountdownTimerRef.current = null;
+		}
+		buyCountdownTimerRef.current = setInterval(() => {
+			setBuyCountdownSeconds((v) => {
+				const n = toInt(v);
+				if (n == null || n <= 0) return 0;
+				return n - 1;
+			});
+		}, 1000);
 		return () => {
-			if (voucherTimerRef.current) {
-				clearInterval(voucherTimerRef.current);
-				voucherTimerRef.current = null;
+			if (buyCountdownTimerRef.current) {
+				clearInterval(buyCountdownTimerRef.current);
+				buyCountdownTimerRef.current = null;
 			}
 		};
-	}, []);
+	}, [isBuying]);
 
 	React.useEffect(() => {
 		loadBundles();
@@ -195,60 +195,22 @@ export default function PortalHome() {
 		try {
 			setVoucherError('');
 			setVoucherSuccess(null);
-			setVoucherExpiredMessage('');
-			setVoucherCountdownSeconds(null);
-			voucherExpiresAtMsRef.current = null;
 			setShowSuccessOverlay(false);
 			setSuccessAutoCloseSeconds(null);
-			if (voucherTimerRef.current) {
-				clearInterval(voucherTimerRef.current);
-				voucherTimerRef.current = null;
-			}
 
 			const data = await voucherConnect({ voucher: code });
 			const durationMinutes = toInt(data?.durationMinutes ?? data?.duration_minutes);
-			const expiresAtIso = data?.expiresAt ?? data?.expires_at ?? null;
-			const expiresAtMs = expiresAtIso ? Date.parse(expiresAtIso) : NaN;
 
 			setVoucherSuccess({
 				message: 'You are now connected',
 				durationMinutes,
-				expiresAt: Number.isFinite(expiresAtMs) ? expiresAtIso : null,
+				expiresAt: null,
 			});
-
-			// Countdown is calculated from timestamps (not by decrementing), so refreshes are correct.
-			if (Number.isFinite(expiresAtMs)) {
-				voucherExpiresAtMsRef.current = expiresAtMs;
-				const update = () => {
-					const ms = voucherExpiresAtMsRef.current;
-					if (!Number.isFinite(ms)) return;
-					const remaining = Math.max(0, Math.floor((ms - Date.now()) / 1000));
-					setVoucherCountdownSeconds(remaining);
-					if (remaining <= 0) {
-						if (voucherTimerRef.current) {
-							clearInterval(voucherTimerRef.current);
-							voucherTimerRef.current = null;
-						}
-						voucherExpiresAtMsRef.current = null;
-						setVoucherSuccess(null);
-						setVoucherCountdownSeconds(null);
-						setVoucherExpiredMessage('Session expired');
-						// "Redirect" back to voucher entry.
-						try {
-							voucherInputRef.current?.focus?.();
-						} catch {
-							// ignore
-						}
-					}
-				};
-				update();
-				voucherTimerRef.current = setInterval(update, 1000);
-			}
 
 			// Preserve input on error; clear on success.
 			setVoucherCode('');
 		} catch (err) {
-			setVoucherError(getApiErrorMessage(err));
+			setVoucherError(err?.response?.data?.error || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.voucher = false;
 			setIsConnectingVoucher(false);
@@ -281,34 +243,56 @@ export default function PortalHome() {
 				txRef: data?.transaction_reference ?? null,
 			});
 		} catch (err) {
-			setBuyError(getApiErrorMessage(err));
+			setBuyError(err?.response?.data?.error || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.pay = false;
 			setIsBuying(false);
+			setBuyCountdownSeconds(null);
 		}
 	}
 
 	return (
 		<PortalLayout
 			overlay={
-				showSuccessOverlay ? (
+				showSuccessOverlay || isBuying ? (
 					<div className="portal-fade-in fixed inset-0 z-50 flex items-stretch justify-center bg-black/45 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] backdrop-blur-sm">
-						<div className="portal-pop mx-auto my-auto w-full max-w-105 overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-[#2a1c72] via-[#063b6e] to-[#052426] shadow-[0_30px_90px_rgba(0,0,0,0.60)]">
-							<div className="border-b border-white/10 bg-white/5 px-5 py-4">
-								<div className="text-center text-[12px] font-extrabold tracking-widest text-white/70">SUCCESS</div>
-							</div>
-							<PortalSuccess
-								onDone={() => {
-									setShowSuccessOverlay(false);
-									setSuccessAutoCloseSeconds(null);
-								}}
-							/>
-							{successAutoCloseSeconds != null ? (
-								<div aria-live="polite" className="px-6 pb-6 text-center text-[13px] font-semibold text-white/65">
-									Continuing in <span className="font-extrabold text-white">{successAutoCloseSeconds}</span>s…
+						{showSuccessOverlay ? (
+							<div className="portal-pop mx-auto my-auto w-full max-w-105 overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-[#2a1c72] via-[#063b6e] to-[#052426] shadow-[0_30px_90px_rgba(0,0,0,0.60)]">
+								<div className="border-b border-white/10 bg-white/5 px-5 py-4">
+									<div className="text-center text-[12px] font-extrabold tracking-widest text-white/70">SUCCESS</div>
 								</div>
-							) : null}
-						</div>
+								<PortalSuccess
+									onDone={() => {
+										setShowSuccessOverlay(false);
+										setSuccessAutoCloseSeconds(null);
+									}}
+								/>
+								{successAutoCloseSeconds != null ? (
+									<div aria-live="polite" className="px-6 pb-6 text-center text-[13px] font-semibold text-white/65">
+										Continuing in <span className="font-extrabold text-white">{successAutoCloseSeconds}</span>s…
+									</div>
+								) : null}
+							</div>
+						) : null}
+						{isBuying ? (
+							<div className="portal-pop mx-auto my-auto w-full max-w-105 overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-[#2a1c72] via-[#063b6e] to-[#052426] shadow-[0_30px_90px_rgba(0,0,0,0.60)]">
+								<div className="border-b border-white/10 bg-white/5 px-5 py-4">
+									<div className="text-center text-[12px] font-extrabold tracking-widest text-white/70">PAYMENT</div>
+								</div>
+								<div className="px-6 py-6 text-center">
+									<div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15">
+										<Spinner className="h-6 w-6 text-white/80" />
+									</div>
+									<div className="mt-3 text-[15px] font-extrabold text-white">Processing Mobile Money…</div>
+									<div className="mt-1 text-[13px] font-semibold text-white/65">Approve the prompt on your phone.</div>
+									{buyCountdownSeconds != null ? (
+										<div aria-live="polite" className="mt-3 text-[13px] font-semibold text-white/65">
+											Waiting <span className="font-extrabold text-white">{Math.max(0, buyCountdownSeconds)}</span>s…
+										</div>
+									) : null}
+								</div>
+							</div>
+						) : null}
 					</div>
 				) : null
 			}
@@ -331,7 +315,6 @@ export default function PortalHome() {
 						onChange={(e) => {
 							setVoucherCode(e.target.value);
 							if (voucherError) setVoucherError('');
-							if (voucherExpiredMessage) setVoucherExpiredMessage('');
 						}}
 						ref={voucherInputRef}
 						className="w-full rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[17px] font-semibold text-white placeholder:text-white/40 outline-none transition focus:border-white/20"
@@ -358,7 +341,6 @@ export default function PortalHome() {
 							{voucherSuccess?.durationMinutes ? (
 								<span> • {formatDurationLabelFromMinutes(voucherSuccess.durationMinutes)}</span>
 							) : null}
-							{voucherCountdownSeconds != null ? <span> • {formatCountdown(voucherCountdownSeconds)}</span> : null}
 						</div>
 					) : null}
 				</div>

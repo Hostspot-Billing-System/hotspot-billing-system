@@ -102,15 +102,20 @@ export async function listAdminTransactions(req, res) {
 
     if (status) {
       const s = status.toLowerCase();
-      if (s !== 'pending' && s !== 'completed' && s !== 'failed') {
-        const err = new Error('status must be one of: pending, completed, failed');
+      if (s !== 'pending' && s !== 'success' && s !== 'completed' && s !== 'failed') {
+        const err = new Error('status must be one of: pending, success, failed');
         err.code = 'BAD_REQUEST';
         err.httpStatus = 400;
         throw err;
       }
 
-      params.push(s);
-      conditions.push(`t.status = $${params.length}`);
+      if (s === 'success') {
+        // API uses 'success' but DB stores 'completed'.
+        conditions.push(`t.status = 'completed'`);
+      } else {
+        params.push(s);
+        conditions.push(`t.status = $${params.length}`);
+      }
     }
 
     if (bundleIdRaw) {
@@ -194,7 +199,7 @@ export async function listAdminTransactions(req, res) {
       bundle_id: row.bundle_id == null ? null : Number(row.bundle_id),
       bundle_name: row.bundle_name ?? null,
       amount_ugx: Number(row.amount_ugx ?? 0),
-      status: row.status,
+      status: String(row.status ?? '').toLowerCase() === 'completed' ? 'success' : row.status,
       payment_method: row.payment_method ?? null,
       payment_provider: row.payment_provider ?? 'NONE',
       created_at: toIso(row.created_at),

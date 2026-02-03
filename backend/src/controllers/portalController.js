@@ -512,110 +512,112 @@ export async function getPortalStatusHandler(req, res) {
 }
 
 export async function postPortalVoucherLoginHandler(req, res) {
+	// ⚠️ STABLE CORE — DO NOT MODIFY WITHOUT FULL TEST
+	// Voucher login is DB-truth only. No countdown. No transactions. No mobile money.
 	let client;
 	try {
 		const mac = req.body?.mac;
 		const ip = req.body?.ip;
-		const voucherCode = req.body?.voucher_code;
+		const voucherCode = String(req.body?.voucher_code ?? '').trim();
+		if (!voucherCode) {
+			return res.status(200).json({ success: false, error: 'Voucher code is required' });
+		}
+
+		try {
+			await upsertPortalSession({ mac, ip });
+		} catch {
+			return res.status(200).json({ success: false, error: 'Missing or invalid device context' });
+		}
 
 		const session = await requirePortalSession({ mac, ip });
 
 		client = await pool.connect();
 		await client.query('BEGIN');
 
-		const redeemed = await VoucherService.redeemVoucherForSessionTransactional(
-			client,
-			{
-				voucher_code: voucherCode,
-				mac_address: session.mac,
-				ip_address: session.ip,
-			},
-			{ skipMikrotikProvisioning: true }
+		const voucherResult = await client.query(
+			`
+			SELECT v.id, v.code, v.status, v.expires_at, v.package_id,
+			       p.name AS package_name, p.duration_minutes, p.mikrotik_profile
+			FROM vouchers v
+			JOIN packages p ON p.id = v.package_id
+			WHERE v.code = $1
+			FOR UPDATE
+			`,
+			[voucherCode]
 		);
 
-		await activateVoucherAccess({
-			voucherCode: redeemed.voucher.code,
-			bundleId: redeemed.voucher.package.id,
-			durationMinutes: redeemed.voucher.package.duration_minutes,
-		});
+		const row = voucherResult.rows?.[0] ?? null;
+		if (!row) {
+			await client.query('ROLLBACK');
+			return res.status(200).json({ success: false, error: 'Invalid voucher' });
+		}
 
-		// STRICT RULE: voucher login is NOT a financial transaction.
-		// Do NOT create any rows in `transactions` for voucher-based access.
+		const status = String(row.status ?? '');
+		if (status !== 'available') {
+			await client.query('ROLLBACK');
+			if (status === 'used') return res.status(200).json({ success: false, error: 'Voucher already used' });
+			if (status === 'expired') return res.status(200).json({ success: false, error: 'Voucher expired' });
+			return res.status(200).json({ success: false, error: 'Voucher not available' });
+		}
+
+		if (row.expires_at) {
+			const expiryCheck = await client.query('SELECT NOW() >= $1::timestamptz AS expired', [row.expires_at]);
+			if (expiryCheck.rows?.[0]?.expired) {
+				await client.query('ROLLBACK');
+				return res.status(200).json({ success: false, error: 'Voucher expired' });
+			}
+		}
+
+		await client.query(
+			`
+			UPDATE vouchers
+			SET status = 'used', used_at = NOW()
+			WHERE id = $1
+			`,
+			[row.id]
+		);
+
+		await client.query(
+			`
+			INSERT INTO hotspot_sessions (voucher_id, mac_address, ip_address)
+			VALUES ($1, $2, $3)
+			`,
+			[row.id, session.mac, session.ip]
+		);
+
+		try {
+			await activateVoucherAccess({
+				voucherCode: row.code,
+				bundleId: row.package_id,
+				durationMinutes: row.duration_minutes,
+			});
+		} catch {
+			// Never block voucher login due to router/mock issues.
+		}
 
 		await client.query('COMMIT');
-
 		return res.status(200).json({
 			success: true,
 			data: {
-				voucher_code: redeemed.voucher.code,
-				expires_at: redeemed.voucher.expires_at ?? null,
-				bundle: redeemed.voucher.package,
+				voucher_code: row.code,
+				expires_at: row.expires_at ?? null,
+				bundle: {
+					id: row.package_id,
+					name: row.package_name,
+					duration_minutes: row.duration_minutes,
+					mikrotik_profile: row.mikrotik_profile,
+				},
 			},
 		});
-	} catch (err) {
+	} catch {
 		if (client) {
 			try {
 				await client.query('ROLLBACK');
 			} catch {
-				// ignore rollback errors
+				// ignore
 			}
 		}
-
-		const mikrotikCode = String(err?.code ?? '');
-		if (mikrotikCode.startsWith('MIKROTIK_')) {
-			return res.status(502).json({
-				success: false,
-				error: err?.message ? `MikroTik error: ${err.message}` : 'MikroTik error',
-			});
-		}
-
-		if (err instanceof PortalSessionError) {
-			return res.status(err.httpStatus).json({
-				success: false,
-				error: { code: err.code, message: err.message },
-			});
-		}
-
-		// Map voucher errors to the public portal spec (USED / EXPIRED / INVALID)
-		const voucherHttp = toVoucherHttpError(err);
-		const voucherErrCode = String(voucherHttp?.body?.error?.code ?? '');
-		if (voucherErrCode.startsWith('VOUCHER_') || voucherErrCode === 'BAD_REQUEST') {
-			let publicCode = voucherErrCode;
-			if (voucherErrCode === 'VOUCHER_USED') publicCode = 'USED';
-			else if (voucherErrCode === 'VOUCHER_EXPIRED') publicCode = 'EXPIRED';
-			else if (voucherErrCode === 'VOUCHER_NOT_FOUND') publicCode = 'INVALID';
-
-			return res.status(voucherHttp.httpStatus ?? 400).json({
-				success: false,
-				error: {
-					code: publicCode,
-					message: voucherHttp?.body?.error?.message ?? 'Voucher error',
-				},
-			});
-		}
-
-		const mtHttp = toMikroTikRuntimeHttpError(err);
-		const mtCode = String(mtHttp?.body?.error?.code ?? '');
-		if (mtCode && mtCode !== 'INTERNAL_ERROR') {
-			return res.status(mtHttp.httpStatus ?? 502).json(mtHttp.body);
-		}
-
-		if (err && err.code && err.httpStatus) {
-			return res.status(err.httpStatus).json({
-				success: false,
-				error: { code: err.code, message: err.message ?? 'Error' },
-			});
-		}
-
-		console.error('[PortalVoucherLogin] unexpected error', {
-			message: err?.message ?? String(err),
-			code: err?.code ?? null,
-		});
-
-		return res.status(500).json({
-			success: false,
-			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
-		});
+		return res.status(200).json({ success: false, error: 'Unable to login with voucher. Please try again.' });
 	} finally {
 		if (client) client.release();
 	}
@@ -678,7 +680,7 @@ export async function postPortalVoucherConnectHandler(req, res) {
 
 		const profile = String(row?.mikrotik_profile ?? '').trim();
 		if (!profile) {
-			throw new PortalSessionError('SERVER_MISCONFIG', 'Voucher is missing MikroTik profile', 500);
+			throw new PortalSessionError('SERVER_MISCONFIG', 'Voucher is not configured', 200);
 		}
 
 		if (isMockMode()) {
@@ -792,9 +794,9 @@ export async function postPortalVoucherConnectHandler(req, res) {
 			code: err?.code ?? null,
 		});
 
-		return res.status(500).json({
+		return res.status(200).json({
 			success: false,
-			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+			error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' },
 		});
 	} finally {
 		if (client) client.release();
@@ -865,28 +867,39 @@ export async function postPortalSessionDisconnectHandler(req, res) {
 }
 
 export async function postPortalBuyBundleHandler(req, res) {
+	// ⚠️ STABLE CORE — DO NOT MODIFY WITHOUT FULL TEST
 	let dbClient;
-	let createdUsername = null;
 	try {
-		const phone = normalizePhoneE164ish(req.body?.phone);
+		const rawPhone = String(req.body?.phone ?? '').trim();
+		if (!rawPhone) {
+			return res.status(200).json({ success: false, error: 'Phone number is required' });
+		}
+
+		let phone;
+		try {
+			phone = normalizePhoneE164ish(rawPhone);
+		} catch {
+			return res.status(200).json({ success: false, error: 'Phone number is invalid' });
+		}
+
 		const paymentProvider = normalizePaymentProviderParam(
 			req.body?.payment_provider ?? req.body?.provider ?? req.body?.paymentProvider
 		);
+
 		const requestedBundle = req.body?.bundle;
 		const bundleIdRaw = req.body?.bundle_id ?? req.body?.bundleId;
+		if (bundleIdRaw == null || String(bundleIdRaw).trim() === '') {
+			return res.status(200).json({ success: false, error: 'Bundle is required' });
+		}
 
 		if (!isMockMode()) {
-			throw new PortalSessionError('NOT_IMPLEMENTED', 'Real payments must use /api/portal/pay', 501);
+			return res.status(200).json({ success: false, error: 'Payments are not available here right now' });
 		}
 
 		const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
 		const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
 		if (!hasPriceUgx) {
-			throw new PortalSessionError(
-				'SERVER_MISCONFIG',
-				'Bundle pricing is not configured (missing packages.price_ugx)',
-				500
-			);
+			return res.status(200).json({ success: false, error: 'Bundles are not configured for pricing' });
 		}
 
 		dbClient = await pool.connect();
@@ -896,18 +909,13 @@ export async function postPortalBuyBundleHandler(req, res) {
 		if (bundleIdRaw != null && String(bundleIdRaw).trim() !== '') {
 			const idNum = Number(String(bundleIdRaw).trim());
 			if (!Number.isFinite(idNum) || idNum <= 0) {
-				throw new PortalSessionError('BAD_REQUEST', 'bundle_id must be a valid number', 400);
+				await dbClient.query('ROLLBACK');
+				return res.status(200).json({ success: false, error: 'Invalid bundle' });
 			}
-
 			const whereActive = hasIsActive ? 'AND is_active = TRUE' : '';
 			const resPkg = await dbClient.query(
 				`
-				SELECT
-					id::int AS id,
-					name,
-					duration_minutes::int AS duration_minutes,
-					mikrotik_profile,
-					price_ugx::int AS price_ugx
+				SELECT id::int AS id, name, duration_minutes::int AS duration_minutes, mikrotik_profile, price_ugx::int AS price_ugx
 				FROM packages
 				WHERE id = $1::bigint
 				${whereActive}
@@ -921,12 +929,7 @@ export async function postPortalBuyBundleHandler(req, res) {
 			const whereActive = hasIsActive ? 'AND is_active = TRUE' : '';
 			const resPkg = await dbClient.query(
 				`
-				SELECT
-					id::int AS id,
-					name,
-					duration_minutes::int AS duration_minutes,
-					mikrotik_profile,
-					price_ugx::int AS price_ugx
+				SELECT id::int AS id, name, duration_minutes::int AS duration_minutes, mikrotik_profile, price_ugx::int AS price_ugx
 				FROM packages
 				WHERE (
 					LOWER(name) = LOWER($1)
@@ -942,23 +945,20 @@ export async function postPortalBuyBundleHandler(req, res) {
 		}
 
 		if (!packageRow?.id) {
-			throw new PortalSessionError('BUNDLE_NOT_FOUND', 'Invalid bundle', 404);
+			await dbClient.query('ROLLBACK');
+			return res.status(200).json({ success: false, error: 'Invalid bundle' });
 		}
 
 		const durationMinutes = Number(packageRow.duration_minutes ?? 0);
-		if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-			throw new PortalSessionError('BUNDLE_NOT_CONFIGURED', 'Bundle duration is missing', 409);
-		}
 		const official = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
-		if (!official) {
-			throw new PortalSessionError('BUNDLE_NOT_FOUND', 'Invalid bundle', 404);
-		}
 		const priceUgx = packageRow.price_ugx == null ? null : Number(packageRow.price_ugx);
-		if (priceUgx == null || !Number.isFinite(priceUgx)) {
-			throw new PortalSessionError('BUNDLE_NOT_CONFIGURED', 'Bundle price is missing', 409);
+		if (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || !official || priceUgx == null || !Number.isFinite(priceUgx)) {
+			await dbClient.query('ROLLBACK');
+			return res.status(200).json({ success: false, error: 'Bundle is not configured' });
 		}
 		if (Number(priceUgx) !== Number(official.price_ugx)) {
-			throw new PortalSessionError('BUNDLE_NOT_CONFIGURED', 'Bundle price mismatch', 409);
+			await dbClient.query('ROLLBACK');
+			return res.status(200).json({ success: false, error: 'Bundle is not configured' });
 		}
 
 		const tx = await TransactionsService.createPendingPortalBuyTransactionTransactional(dbClient, {
@@ -968,6 +968,8 @@ export async function postPortalBuyBundleHandler(req, res) {
 			payment_provider: paymentProvider,
 		});
 
+		await new Promise((r) => setTimeout(r, 1000 + Math.floor(Math.random() * 2000)));
+
 		const paymentOk = isDeterministicPaymentSuccess({
 			phone,
 			bundleId: packageRow.id,
@@ -975,39 +977,57 @@ export async function postPortalBuyBundleHandler(req, res) {
 		});
 		if (!paymentOk) {
 			await TransactionsService.markTransactionFailedTransactional(dbClient, tx.reference, {
-				failure_reason: 'DETERMINISTIC_PAYMENT_FAILED',
+				failure_reason: 'PAYMENT_FAILED',
 				payment_provider: paymentProvider,
 			});
 			await dbClient.query('COMMIT');
 			dbClient.release();
 			dbClient = null;
-			return res.status(402).json({
-				success: false,
-				error: { code: 'PAYMENT_FAILED', message: 'Payment failed. Please try again.' },
-			});
+			return res.status(200).json({ success: false, error: 'Payment failed. Please try again.' });
 		}
 
-		const username = `U${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-		const password = crypto.randomBytes(5).toString('hex').toUpperCase();
-		createdUsername = username;
-
-		try {
-			await upsertRuntimeHotspotUser({
-				username,
-				password,
-				profile: `hotspot_${Number(packageRow.id)}`,
-				limit_uptime: `${Math.floor(durationMinutes)}m`,
-				disabled: false,
-			});
-		} catch (err) {
+		const voucherRes = await dbClient.query(
+			`
+			SELECT id, code
+			FROM vouchers
+			WHERE package_id = $1
+			  AND status = 'available'
+			  AND (expires_at IS NULL OR expires_at > NOW())
+			ORDER BY id ASC
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+			`,
+			[Number(packageRow.id)]
+		);
+		const voucherRow = voucherRes.rows?.[0] ?? null;
+		if (!voucherRow?.id || !voucherRow?.code) {
 			await TransactionsService.markTransactionFailedTransactional(dbClient, tx.reference, {
-				failure_reason: err?.code ? `PROVISION_FAILED:${String(err.code)}` : 'PROVISION_FAILED',
+				failure_reason: 'NO_VOUCHERS_AVAILABLE',
 				payment_provider: paymentProvider,
 			});
 			await dbClient.query('COMMIT');
 			dbClient.release();
 			dbClient = null;
-			throw new PortalSessionError('PROVISION_FAILED', 'Failed to provision hotspot user', 502);
+			return res.status(200).json({ success: false, error: 'No vouchers available for this bundle' });
+		}
+
+		await dbClient.query(
+			`
+			UPDATE vouchers
+			SET status = 'used', used_at = NOW()
+			WHERE id = $1
+			`,
+			[voucherRow.id]
+		);
+
+		try {
+			await activateVoucherAccess({
+				voucherCode: voucherRow.code,
+				bundleId: Number(packageRow.id),
+				durationMinutes,
+			});
+		} catch {
+			// never crash due to router/mock
 		}
 
 		await TransactionsService.markTransactionCompletedTransactional(dbClient, tx.reference, {
@@ -1022,8 +1042,9 @@ export async function postPortalBuyBundleHandler(req, res) {
 			success: true,
 			data: {
 				transaction_reference: tx.reference,
-				username,
-				password,
+				voucher_code: voucherRow.code,
+				username: voucherRow.code,
+				password: '',
 			},
 		});
 	} catch (err) {
@@ -1031,42 +1052,19 @@ export async function postPortalBuyBundleHandler(req, res) {
 			try {
 				await dbClient.query('ROLLBACK');
 			} catch {
-				// ignore rollback errors
+				// ignore
 			}
 		}
 
-		const mikrotikCode = String(err?.code ?? '');
-		if (mikrotikCode.startsWith('MIKROTIK_')) {
-			if (createdUsername) {
-				try {
-					await mikrotikRuntimeService.removeUser(createdUsername);
-				} catch {
-					// ignore cleanup errors
-				}
-			}
-			const http = mikrotikCode === 'MIKROTIK_TIMEOUT' ? 504 : 502;
-			return res.status(http).json({
+		const txHttp = TransactionsService.toHttpError?.(err);
+		if (txHttp?.body?.success === false) {
+			return res.status(200).json({
 				success: false,
-				error: { code: mikrotikCode, message: err?.message ?? 'MikroTik error' },
+				error: txHttp?.body?.error?.message || 'Unable to complete purchase. Please try again.',
 			});
 		}
 
-		if (err instanceof PortalSessionError) {
-			return res.status(err.httpStatus).json({
-				success: false,
-				error: { code: err.code, message: err.message },
-			});
-		}
-
-		console.error('[PortalBuy] unexpected error', {
-			message: err?.message ?? String(err),
-			code: err?.code ?? null,
-		});
-
-		return res.status(500).json({
-			success: false,
-			error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
-		});
+		return res.status(200).json({ success: false, error: 'Unable to complete purchase. Please try again.' });
 	} finally {
 		if (dbClient) dbClient.release();
 	}

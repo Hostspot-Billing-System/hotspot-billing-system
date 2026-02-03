@@ -88,10 +88,12 @@ function normalizeStatus(value) {
   const s = normalizeText(value);
   if (!s) return null;
   const lower = s.toLowerCase();
-  if (lower !== 'pending' && lower !== 'completed' && lower !== 'failed') {
+  if (lower !== 'pending' && lower !== 'completed' && lower !== 'failed' && lower !== 'success') {
     throw new DomainError('BAD_REQUEST', `Invalid status: ${value}`, 400);
   }
-  return lower;
+  // API-facing convention: pending | success | failed
+  // DB-backed legacy: pending | completed | failed
+  return lower === 'success' ? 'completed' : lower;
 }
 
 function normalizeVoucherAttemptStatus(value) {
@@ -193,7 +195,9 @@ function normalizeLegacyTransactionStatus(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return raw;
   const lower = raw.toLowerCase();
-  if (lower === 'success') return 'completed';
+  // Normalize DB legacy 'completed' to API-facing 'success'.
+  if (lower === 'completed') return 'success';
+  if (lower === 'success') return 'success';
   return lower;
 }
 

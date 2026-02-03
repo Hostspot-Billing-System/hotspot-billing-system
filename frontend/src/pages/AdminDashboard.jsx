@@ -22,6 +22,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
 const STAT_CARDS = [
+  { key: 'totalMobileMoney', title: 'Total Mobile Money', color: '#0ea5e9' },
+  { key: 'successfulToday', title: 'Successful Today', color: '#16a34a' },
   { key: 'todaysRevenue', title: "Today’s Revenue", color: '#3b82f6' },
   { key: 'voucherStock', title: 'Voucher Stock', color: '#22c55e' },
   { key: 'totalWithdrawals', title: 'Total Withdrawals', color: '#7c3aed' },
@@ -37,15 +39,13 @@ const QUICK_ACTIONS = [
   { key: 'withdrawFunds', label: 'Withdraw Funds', color: '#1d4ed8' },
 ];
 
-const PLACEHOLDER_TRANSACTIONS = Array.from({ length: 4 }).map((_, index) => ({
-  id: index + 1,
-  date: '—',
-  bundle: '—',
-  amount: '—',
-  commission: '—',
-  paymentMethod: '—',
-  status: '—',
-}));
+function formatStatusLabel(status) {
+  const s = String(status ?? '').toLowerCase();
+  if (s === 'completed' || s === 'success') return 'Success';
+  if (s === 'failed') return 'Failed';
+  if (s === 'pending') return 'Pending';
+  return status ?? '—';
+}
 
 function StatCard({ title, color }) {
   return (
@@ -124,6 +124,8 @@ function SectionHeader({ title, right }) {
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState(null);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [recent, setRecent] = useState([]);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'error' });
 
   useEffect(() => {
@@ -152,7 +154,36 @@ export default function AdminDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setRecentLoading(true);
+      try {
+        const response = await api.get('/api/admin/dashboard/recent-transactions');
+        const list = Array.isArray(response?.data?.data) ? response.data.data : [];
+        if (!cancelled) setRecent(list);
+      } catch (e) {
+        const message =
+          e?.response?.data?.error?.message ??
+          e?.response?.data?.message ??
+          e?.message ??
+          'Failed to load recent transactions';
+        if (!cancelled) setSnack({ open: true, message, severity: 'error' });
+        if (!cancelled) setRecent([]);
+      } finally {
+        if (!cancelled) setRecentLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const statValues = useMemo(() => {
+    const totalMobileMoney = metrics?.total_mobile_money_transactions;
+    const successfulToday = metrics?.successful_transactions_today;
     const todayRevenue = metrics?.today_revenue_ugx;
     const voucherStock = metrics?.voucher_stock_available;
     const totalWithdrawals = metrics?.total_withdrawals_ugx;
@@ -160,6 +191,20 @@ export default function AdminDashboard() {
     const smsStatus = metrics?.sms_status;
 
     return {
+      totalMobileMoney: {
+        value:
+          totalMobileMoney != null && Number.isFinite(Number(totalMobileMoney))
+            ? Number(totalMobileMoney).toLocaleString()
+            : '--',
+        footer: 'All time (mobile money)',
+      },
+      successfulToday: {
+        value:
+          successfulToday != null && Number.isFinite(Number(successfulToday))
+            ? Number(successfulToday).toLocaleString()
+            : '--',
+        footer: 'Today only',
+      },
       todaysRevenue: {
         value: todayRevenue != null ? `UGX ${formatMoney(todayRevenue)}` : '--',
         footer: 'Updated live',
@@ -305,7 +350,13 @@ export default function AdminDashboard() {
         <Stack spacing={2} sx={{ p: 2 }}>
           <SectionHeader
             title="Recent Transactions"
-            right={<Chip label="Placeholder" size="small" variant="outlined" />}
+            right={
+              <Chip
+                label={recentLoading ? 'Loading…' : 'Live'}
+                size="small"
+                variant="outlined"
+              />
+            }
           />
         </Stack>
 
@@ -313,25 +364,41 @@ export default function AdminDashboard() {
           <Table size="small" aria-label="recent transactions" sx={{ minWidth: { xs: 720, md: 0 } }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 900 }}>Date</TableCell>
+                <TableCell sx={{ fontWeight: 900 }}>Date/Time</TableCell>
+                <TableCell sx={{ fontWeight: 900 }}>Reference</TableCell>
+                <TableCell sx={{ fontWeight: 900 }}>Phone</TableCell>
                 <TableCell sx={{ fontWeight: 900 }}>Bundle</TableCell>
                 <TableCell sx={{ fontWeight: 900 }}>Amount</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>Commission</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>Payment Method</TableCell>
                 <TableCell sx={{ fontWeight: 900 }}>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {PLACEHOLDER_TRANSACTIONS.map((row) => (
-                <TableRow key={row.id} hover>
-                  <TableCell>{row.date}</TableCell>
-                  <TableCell>{row.bundle}</TableCell>
-                  <TableCell>{row.amount}</TableCell>
-                  <TableCell>{row.commission}</TableCell>
-                  <TableCell>{row.paymentMethod}</TableCell>
-                  <TableCell>{row.status}</TableCell>
+              {recentLoading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <TableRow key={`recent-skel-${idx}`}>
+                    <TableCell colSpan={6}>
+                      <Skeleton variant="text" width="90%" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : recent.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
+                    No recent mobile money transactions.
+                  </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                recent.map((row) => (
+                  <TableRow key={row.reference ?? row.date_time} hover>
+                    <TableCell>{row.date_time ? new Date(row.date_time).toLocaleString() : '—'}</TableCell>
+                    <TableCell>{row.reference ?? '—'}</TableCell>
+                    <TableCell>{row.customer_phone ?? '—'}</TableCell>
+                    <TableCell>{row.bundle_name ?? '—'}</TableCell>
+                    <TableCell>{row.amount_ugx != null ? `UGX ${formatMoney(row.amount_ugx)}` : '—'}</TableCell>
+                    <TableCell>{formatStatusLabel(row.status)}</TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </TableContainer>

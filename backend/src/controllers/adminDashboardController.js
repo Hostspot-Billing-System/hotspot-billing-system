@@ -17,6 +17,20 @@ export async function getAdminDashboardMetrics(req, res) {
       )
       SELECT
         (
+          SELECT COUNT(*)::int
+          FROM transactions t
+          WHERE t.payment_method = 'MOBILE_MONEY'
+        ) AS total_mobile_money_transactions,
+
+        (
+          SELECT COUNT(*)::int
+          FROM transactions t
+          WHERE t.status = 'completed'
+            AND t.payment_method = 'MOBILE_MONEY'
+            AND t.created_at >= (SELECT ts FROM today_start)
+        ) AS successful_transactions_today,
+
+        (
           SELECT COALESCE(SUM(t.amount_ugx), 0)::numeric(14,2)
           FROM transactions t
           WHERE t.status = 'completed'
@@ -49,6 +63,8 @@ export async function getAdminDashboardMetrics(req, res) {
     const row = result.rows?.[0] ?? {};
 
     return res.status(200).json({
+      total_mobile_money_transactions: Number(row.total_mobile_money_transactions ?? 0),
+      successful_transactions_today: Number(row.successful_transactions_today ?? 0),
       today_revenue_ugx: row.today_revenue_ugx == null ? '0.00' : String(row.today_revenue_ugx),
       voucher_stock_available: Number(row.voucher_stock_available ?? 0),
       total_withdrawals_ugx: row.total_withdrawals_ugx == null ? '0.00' : String(row.total_withdrawals_ugx),
@@ -90,7 +106,7 @@ export async function getAdminDashboardRecentTransactions(req, res) {
       reference: row.reference,
       customer_phone: row.customer_phone ?? null,
       amount_ugx: row.amount_ugx == null ? '0.00' : String(row.amount_ugx),
-      status: row.status,
+      status: String(row.status ?? '').toLowerCase() === 'completed' ? 'success' : row.status,
       bundle_name: row.bundle_name ?? null,
       reason: row.failure_reason ?? null,
     }));

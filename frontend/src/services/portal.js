@@ -7,9 +7,11 @@ function unwrapSuccess(responseData) {
 			const message =
 				(typeof responseData?.error === 'string' && responseData.error) ||
 				responseData?.error?.message ||
-				'Request failed';
+				'Unable to complete request. Please try again.';
 			const error = new Error(message);
 			error.code = responseData?.error?.code;
+			// Provide axios-like shape so callers can use err?.response?.data?.error safely.
+			error.response = { data: { error: message } };
 			throw error;
 		}
 	}
@@ -27,7 +29,7 @@ export function getApiErrorMessage(err) {
 	const backendError = err?.response?.data?.error;
 	if (typeof backendError === 'string' && backendError.trim()) return backendError;
 	return (
-		err?.response?.data?.error?.message ||
+		err?.response?.data?.error ||
 		err?.response?.data?.message ||
 		err?.message ||
 		'Request failed'

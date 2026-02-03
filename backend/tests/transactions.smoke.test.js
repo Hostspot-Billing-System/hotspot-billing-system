@@ -76,7 +76,7 @@ function assertTransactionContract(tx) {
   assert.equal(typeof tx.net_amount_ugx, 'number');
   assert.ok(Number.isFinite(tx.net_amount_ugx));
 
-  assert.ok(['pending', 'completed', 'failed'].includes(tx.status));
+  assert.ok(['pending', 'success', 'failed'].includes(tx.status));
   assert.equal(typeof tx.payment_provider, 'string');
 
   assertIsoString(tx.created_at, 'created_at');
@@ -228,15 +228,15 @@ test('Test 2 — Pagination (?page=1&perPage=1)', async (t) => {
   summary.pagination = true;
 });
 
-test('Test 3 — Status Filter (?status=completed)', async (t) => {
+test('Test 3 — Status Filter (?status=success)', async (t) => {
   if (!schemaReady) return t.skip('Schema not ready');
-  const res = await request(app).get('/api/transactions').query({ status: 'completed' });
+  const res = await request(app).get('/api/transactions').query({ status: 'success' });
   assert.equal(res.status, 200);
   assert.equal(res.body?.success, true);
   assert.ok(Array.isArray(res.body?.data));
   for (const item of res.body.data) {
     assertTransactionContract(item);
-    assert.equal(item.status, 'completed');
+    assert.equal(item.status, 'success');
   }
   summary.filters = true;
 });

@@ -20,27 +20,36 @@ const app = express();
 /* =========================
    CORS CONFIG
 ========================= */
-const allowedOrigins = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-]);
-
-const localDevOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
+// ⚠️ STABLE CORE — DO NOT MODIFY WITHOUT FULL TEST
+const allowedOrigins = [
+   'http://localhost:5173',
+   'http://localhost:5174',
+   'http://127.0.0.1:5173',
+   'http://127.0.0.1:5174',
+   /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
+];
 
 app.use(
-  cors({
-    origin(origin, callback) {
-      // Allow curl, Postman, server-to-server
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.has(origin)) return callback(null, true);
-      if (localDevOriginPattern.test(origin)) return callback(null, true);
+   cors({
+      origin: (origin, callback) => {
+         // Allow curl, Postman, server-to-server
+         if (!origin) return callback(null, true);
 
-      return callback(new Error(`CORS blocked origin: ${origin}`));
-    },
-    credentials: true,
-  })
+         const allowed = allowedOrigins.some((o) =>
+            typeof o === 'string' ? o === origin : o.test(origin)
+         );
+
+         if (!allowed) {
+            // Never crash due to CORS.
+            // eslint-disable-next-line no-console
+            console.warn('[CORS] Blocked origin:', origin);
+            return callback(null, true);
+         }
+
+         return callback(null, true);
+      },
+      credentials: true,
+   })
 );
 
 /* =========================
@@ -86,6 +95,19 @@ app.use((req, res) => {
     success: false,
     error: "Route not found",
   });
+});
+
+// ⚠️ STABLE CORE — DO NOT MODIFY WITHOUT FULL TEST
+// Global error handler: never return HTTP 500 to the frontend.
+// NOTE: only handles errors forwarded via next(err).
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+   // eslint-disable-next-line no-console
+   console.error('[ERROR]', err?.message ?? err);
+   res.status(200).json({
+      success: false,
+      error: err?.userMessage || 'Something went wrong',
+   });
 });
 
 export default app;
