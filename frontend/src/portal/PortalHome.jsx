@@ -5,6 +5,7 @@ import PortalSuccess from './PortalSuccess.jsx';
 import {
 	buyBundle,
 	fetchPortalBundles,
+	getApiErrorMessage,
 	voucherConnect,
 } from '../services/portal.js';
 import mtnLogo from '../assets/mtn.png';
@@ -131,7 +132,7 @@ export default function PortalHome() {
 			setBundles(Array.isArray(list) ? list : []);
 		} catch (err) {
 			setBundles([]);
-			setBundlesError(err?.response?.data?.error || 'Unable to complete request. Please try again.');
+			setBundlesError(getApiErrorMessage(err) || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.bundles = false;
 			setIsLoadingBundles(false);
@@ -210,7 +211,7 @@ export default function PortalHome() {
 			// Preserve input on error; clear on success.
 			setVoucherCode('');
 		} catch (err) {
-			setVoucherError(err?.response?.data?.error || 'Unable to complete request. Please try again.');
+			setVoucherError(getApiErrorMessage(err) || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.voucher = false;
 			setIsConnectingVoucher(false);
@@ -243,7 +244,7 @@ export default function PortalHome() {
 				txRef: data?.transaction_reference ?? null,
 			});
 		} catch (err) {
-			setBuyError(err?.response?.data?.error || 'Unable to complete request. Please try again.');
+			setBuyError(getApiErrorMessage(err) || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.pay = false;
 			setIsBuying(false);

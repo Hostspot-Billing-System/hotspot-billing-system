@@ -28,12 +28,18 @@ export function getApiErrorMessage(err) {
 
 	const backendError = err?.response?.data?.error;
 	if (typeof backendError === 'string' && backendError.trim()) return backendError;
-	return (
-		err?.response?.data?.error ||
-		err?.response?.data?.message ||
-		err?.message ||
-		'Request failed'
-	);
+	if (backendError && typeof backendError === 'object') {
+		const msg = backendError?.message;
+		if (typeof msg === 'string' && msg.trim()) return msg;
+	}
+
+	const backendMessage = err?.response?.data?.message;
+	if (typeof backendMessage === 'string' && backendMessage.trim()) return backendMessage;
+
+	const message = err?.message;
+	if (typeof message === 'string' && message.trim()) return message;
+
+	return 'Request failed';
 }
 
 export async function fetchPortalContext(params) {
