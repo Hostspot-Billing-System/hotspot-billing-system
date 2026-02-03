@@ -48,12 +48,26 @@ export async function fetchPortalContext(params) {
 }
 
 export async function fetchPortalBundles() {
-	const res = await api.get('/api/portal/bundles');
-	const data = res.data;
-	if (data && typeof data === 'object' && data.success === true && Array.isArray(data.bundles)) {
-		return data.bundles;
+	const res = await api.get('/api/bundles', { params: { status: 'active' } });
+	const payload = res?.data;
+	if (payload && typeof payload === 'object' && payload.success === true && Array.isArray(payload.data)) {
+		return payload.data
+			.map((b) => {
+				const id = String(b?.id ?? '').trim();
+				const name = String(b?.name ?? '').trim();
+				if (!id || !name) return null;
+				return {
+					id,
+					name,
+					price_ugx: b?.price_ugx == null ? 0 : Number(b.price_ugx),
+					currency: 'UGX',
+					duration_minutes: b?.duration_minutes == null ? null : Number(b.duration_minutes),
+				};
+			})
+			.filter(Boolean);
 	}
-	return unwrapSuccess(data);
+
+	return unwrapSuccess(payload);
 }
 
 export async function voucherLogin({ mac, ip, voucher_code }) {

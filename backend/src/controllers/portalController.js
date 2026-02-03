@@ -22,16 +22,6 @@ function isMockMode() {
 	return Boolean(env.MIKROTIK_MOCK || mode === 'mock');
 }
 
-const OFFICIAL_BUNDLES = [
-	{ key: '2h', name: '2 Hours', duration_minutes: 120, price_ugx: 500, mikrotik_profile: '2h-unlimited' },
-	{ key: '12h', name: '12 Hours', duration_minutes: 720, price_ugx: 1000, mikrotik_profile: '12h-unlimited' },
-	{ key: 'daily', name: 'Daily', duration_minutes: 1440, price_ugx: 1500, mikrotik_profile: 'daily-unlimited' },
-	{ key: 'weekly', name: 'Weekly', duration_minutes: 10080, price_ugx: 6000, mikrotik_profile: 'weekly-unlimited' },
-	{ key: 'monthly', name: 'Monthly', duration_minutes: 43200, price_ugx: 23000, mikrotik_profile: 'monthly-unlimited' },
-];
-
-const OFFICIAL_BY_DURATION = new Map(OFFICIAL_BUNDLES.map((b) => [Number(b.duration_minutes), b]));
-
 function normalizePaymentProviderParam(value) {
 	const raw = String(value ?? '').trim().toUpperCase();
 	if (!raw) return 'MTN';
@@ -68,60 +58,46 @@ async function hasPublicTableColumn({ table, column }) {
 async function listPortalBundlesFromDb() {
 	const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
 	const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
+	const hasDeletedAt = await hasPublicTableColumn({ table: 'packages', column: 'deleted_at' });
 
-	const columns = [
-		'id::int AS id',
-		'name',
-		'duration_minutes::int AS duration_minutes',
-		'mikrotik_profile',
-		hasPriceUgx ? 'price_ugx::int AS price_ugx' : null,
-		hasIsActive ? 'is_active' : null,
-	]
-		.filter(Boolean)
-		.join(', ');
-
-	const where = hasIsActive ? 'WHERE is_active = true' : '';
+	// Captive portal bundle catalog must come from the DB (no hardcoded fallback).
+	// Only return ACTIVE bundles with valid pricing.
+	const whereParts = [];
+	if (hasIsActive) whereParts.push('is_active = true');
+	if (hasDeletedAt) whereParts.push('deleted_at IS NULL');
+	const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 	const res = await query(
 		`
-		SELECT ${columns}
+		SELECT
+			id::int AS id,
+			name,
+			duration_minutes::int AS duration_minutes,
+			mikrotik_profile,
+			${hasPriceUgx ? 'price_ugx::int AS price_ugx' : 'NULL::int AS price_ugx'}
 		FROM packages
 		${where}
 		ORDER BY duration_minutes ASC, id ASC
 		`
 	);
 
-	const rows = res.rows ?? [];
-	const pickedByDuration = new Map();
-
-	for (const row of rows) {
-		const durationMinutes = row.duration_minutes == null ? null : Number(row.duration_minutes);
-		const official = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
-		if (!official) continue;
-
-		// If price_ugx exists and is set, enforce it matches the canonical price.
-		if (hasPriceUgx) {
-			const price = row.price_ugx == null ? null : Number(row.price_ugx);
-			if (price != null && Number.isFinite(price) && Number(price) !== Number(official.price_ugx)) {
-				throw new PortalSessionError('SERVER_MISCONFIG', `Bundle price mismatch for ${official.name}`, 500);
-			}
-		}
-
-		// Prefer the first row by ORDER BY duration,id.
-		if (pickedByDuration.has(Number(durationMinutes))) continue;
-		pickedByDuration.set(Number(durationMinutes), {
-			id: row.id == null ? null : Number(row.id),
-			name: String(row.name ?? '').trim() || official.name,
-			profile: row.mikrotik_profile,
-			mikrotik_profile: row.mikrotik_profile,
-			durationMinutes,
-			duration_minutes: durationMinutes,
-			price_ugx: Number(official.price_ugx),
-		});
-	}
-
-	// Return in canonical order, and tolerate partial DB config by returning only what exists.
-	// The portal UI will still show what's available instead of erroring.
-	return OFFICIAL_BUNDLES.map((b) => pickedByDuration.get(Number(b.duration_minutes)) ?? null).filter(Boolean);
+	return (res.rows ?? [])
+		.map((row) => {
+			const id = row?.id == null ? null : Number(row.id);
+			const name = String(row?.name ?? '').trim();
+			const duration_minutes = row?.duration_minutes == null ? null : Number(row.duration_minutes);
+			const price_ugx = row?.price_ugx == null ? null : Number(row.price_ugx);
+			if (!id || !name) return null;
+			if (!Number.isFinite(duration_minutes) || duration_minutes <= 0) return null;
+			if (!Number.isFinite(price_ugx) || price_ugx <= 0) return null;
+			return {
+				id,
+				name,
+				mikrotik_profile: row?.mikrotik_profile ?? null,
+				duration_minutes,
+				price_ugx,
+			};
+		})
+		.filter(Boolean);
 }
 
 function normalizePhoneE164ish(phone) {
@@ -368,34 +344,20 @@ export async function getPortalBundlesHandler(_req, res) {
 		// Bundles are a pricing/catalog concern. Do NOT depend on router availability.
 		const raw = await listPortalBundlesFromDb();
 		const bundles = (Array.isArray(raw) ? raw : [])
-			.map((b) => {
-				const id = b?.id == null ? null : Number(b.id);
-				const name = String(b?.name ?? '').trim();
-				if (!id || !name) return null;
-				const price = b?.price_ugx == null ? 0 : Number(b.price_ugx);
-				return {
-					id: String(id),
-					name,
-					price: Number.isFinite(price) ? price : 0,
-					currency: 'UGX',
-					duration_minutes: b?.duration_minutes == null ? null : Number(b.duration_minutes),
-				};
-			})
-			.filter(Boolean);
-		console.log('[PORTAL] Returning bundles (db)', bundles);
+			.map((b) => ({
+				id: String(b.id),
+				name: b.name,
+				price: Number(b.price_ugx),
+				currency: 'UGX',
+				duration_minutes: Number(b.duration_minutes),
+			}))
+			.filter((b) => b.id && b.name);
 		res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
 		return res.status(200).json({ success: true, bundles });
 	} catch (err) {
 		console.warn('[Portal Bundles] failed to load bundles from DB', err?.code ?? '', err?.message ?? err);
-		// Fallback: still return canonical bundles so the UI can render.
-		const bundles = OFFICIAL_BUNDLES.map((b) => ({
-			id: String(b.duration_minutes),
-			name: b.name,
-			price: b.price_ugx,
-			currency: 'UGX',
-			duration_minutes: b.duration_minutes,
-		}));
-		return res.status(200).json({ success: true, bundles });
+		// No hardcoded fallback bundles. Keep UI stable with an empty list.
+		return res.status(200).json({ success: true, bundles: [] });
 	}
 }
 
@@ -958,15 +920,13 @@ export async function postPortalBuyBundleHandler(req, res) {
 		}
 
 		const durationMinutes = Number(packageRow.duration_minutes ?? 0);
-		const official = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
 		const rawDbPriceUgx = packageRow.price_ugx == null ? null : Number(packageRow.price_ugx);
-		const priceUgx = hasPriceUgx && rawDbPriceUgx != null && Number.isFinite(rawDbPriceUgx) ? Number(rawDbPriceUgx) : Number(official?.price_ugx);
-		if (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || !official || priceUgx == null || !Number.isFinite(priceUgx)) {
+		const priceUgx = hasPriceUgx && rawDbPriceUgx != null && Number.isFinite(rawDbPriceUgx) ? Number(rawDbPriceUgx) : null;
+		if (!hasPriceUgx || priceUgx == null) {
 			await dbClient.query('ROLLBACK');
 			return res.status(200).json({ success: false, error: 'Bundle is not configured' });
 		}
-		// If DB has explicit pricing, enforce it matches canonical pricing.
-		if (hasPriceUgx && rawDbPriceUgx != null && Number.isFinite(rawDbPriceUgx) && Number(rawDbPriceUgx) !== Number(official.price_ugx)) {
+		if (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || !Number.isFinite(priceUgx) || priceUgx <= 0) {
 			await dbClient.query('ROLLBACK');
 			return res.status(200).json({ success: false, error: 'Bundle is not configured' });
 		}

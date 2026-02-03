@@ -137,10 +137,33 @@ export class VoucherUploadService {
     try {
       await client.query('BEGIN');
 
-      // Ensure package exists
-      const pkg = await client.query('SELECT id FROM packages WHERE id = $1', [packageId]);
-      if (pkg.rowCount !== 1) {
-        throw new DomainError('PACKAGE_NOT_FOUND', 'Package not found', 404);
+      const hasIsActiveRes = await client.query(
+        `
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'packages'
+          AND column_name = 'is_active'
+        LIMIT 1
+        `
+      );
+      const hasIsActive = Boolean(hasIsActiveRes.rows?.[0]);
+
+      // Ensure package exists (and is active if supported by schema)
+      if (hasIsActive) {
+        const pkg = await client.query('SELECT id, is_active FROM packages WHERE id = $1', [packageId]);
+        if (pkg.rowCount !== 1) {
+          throw new DomainError('PACKAGE_NOT_FOUND', 'Package not found', 404);
+        }
+        const isActive = Boolean(pkg.rows?.[0]?.is_active);
+        if (!isActive) {
+          throw new DomainError('BUNDLE_DISABLED', 'Bundle is disabled. Enable it to upload vouchers.', 409);
+        }
+      } else {
+        const pkg = await client.query('SELECT id FROM packages WHERE id = $1', [packageId]);
+        if (pkg.rowCount !== 1) {
+          throw new DomainError('PACKAGE_NOT_FOUND', 'Package not found', 404);
+        }
       }
 
       // Create batch record

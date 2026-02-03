@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   InputLabel,
@@ -13,20 +17,11 @@ import {
   Select,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material';
-import { useMediaQuery } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
 
-import { api } from '../services/api';
-import { getPackagesFull } from '../services/packages';
+import { createBundle, deleteBundle, listBundles, patchBundleStatus, updateBundle } from '../services/bundles';
 
 function extractBackendError(err) {
   const data = err?.response?.data;
@@ -52,19 +47,7 @@ function formatUGX(value) {
   return `${n.toLocaleString()} UGX`;
 }
 
-async function fetchVoucherCountsForPackage(packageId, { signal } = {}) {
-  const [totalRes, availRes] = await Promise.all([
-    api.get('/api/vouchers', { params: { package_id: packageId }, signal }),
-    api.get('/api/vouchers', { params: { package_id: packageId, status: 'available' }, signal }),
-  ]);
-
-  const total = Array.isArray(totalRes?.data?.data) ? totalRes.data.data.length : 0;
-  const available = Array.isArray(availRes?.data?.data) ? availRes.data.data.length : 0;
-  return { total, available };
-}
-
 export default function AdminBundles() {
-  const theme = useTheme();
   // Always use card layout to avoid table clipping/hidden actions on mid-size laptops.
   // (The right panel is narrower due to the admin sidebar and left form column.)
   const useCardLayout = true;
@@ -72,8 +55,17 @@ export default function AdminBundles() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const [voucherCounts, setVoucherCounts] = useState({});
-  const [countsLoading, setCountsLoading] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [statusLoadingById, setStatusLoadingById] = useState({});
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editBundleId, setEditBundleId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', duration: '', price: '', description: '' });
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const [draftSearch, setDraftSearch] = useState('');
   const [draftStatus, setDraftStatus] = useState('all');
@@ -82,18 +74,29 @@ export default function AdminBundles() {
   const [form, setForm] = useState({ name: '', duration: '', price: '', description: '' });
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'info' });
 
-  const abortRef = useRef(null);
+  async function loadBundles() {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await listBundles();
+      setRows(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setError(extractBackendError(err));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
+    (async () => {
       try {
-        const res = await getPackagesFull();
+        setLoading(true);
+        setError(null);
+        const list = await listBundles();
         if (cancelled) return;
-        setRows(Array.isArray(res.data) ? res.data : []);
+        setRows(Array.isArray(list) ? list : []);
       } catch (err) {
         if (cancelled) return;
         setError(extractBackendError(err));
@@ -101,62 +104,154 @@ export default function AdminBundles() {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
-
-    load();
+    })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  useEffect(() => {
-    if (!rows.length) return;
+  function parseRequiredInt(value) {
+    const n = Number(String(value ?? '').trim());
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.floor(n);
+  }
 
-    try {
-      abortRef.current?.abort?.();
-    } catch {
-      // ignore
+  async function onCreate() {
+    const name = String(form.name ?? '').trim();
+    const duration_minutes = parseRequiredInt(form.duration);
+    const price_ugx = parseRequiredInt(form.price);
+    const description = String(form.description ?? '').trim() || null;
+
+    if (!name) {
+      setSnack({ open: true, message: 'Bundle name is required.', severity: 'error' });
+      return;
     }
-    const controller = new AbortController();
-    abortRef.current = controller;
+    if (!duration_minutes) {
+      setSnack({ open: true, message: 'Duration (minutes) is required.', severity: 'error' });
+      return;
+    }
+    if (!price_ugx) {
+      setSnack({ open: true, message: 'Price (UGX) is required.', severity: 'error' });
+      return;
+    }
 
-    let cancelled = false;
-    (async () => {
-      setCountsLoading(true);
-      try {
-        const pairs = await Promise.all(
-          rows.map(async (r) => {
-            const id = Number(r?.id);
-            if (!Number.isFinite(id) || id <= 0) return [null, null];
-            const counts = await fetchVoucherCountsForPackage(id, { signal: controller.signal });
-            return [id, counts];
-          })
-        );
+    setCreateLoading(true);
+    try {
+      await createBundle({ name, duration_minutes, price_ugx, description });
+      setForm({ name: '', duration: '', price: '', description: '' });
+      await loadBundles();
+      setSnack({ open: true, message: 'Bundle created successfully.', severity: 'success' });
+    } catch (err) {
+      const e = extractBackendError(err);
+      setSnack({ open: true, message: e.message || 'Failed to create bundle.', severity: 'error' });
+    } finally {
+      setCreateLoading(false);
+    }
+  }
 
-        if (cancelled) return;
-        const next = {};
-        for (const [id, counts] of pairs) {
-          if (id && counts) next[id] = counts;
-        }
-        setVoucherCounts(next);
-      } catch (err) {
-        if (cancelled) return;
-        // If vouchers endpoint fails, keep UI stable.
-        setVoucherCounts({});
-      } finally {
-        if (!cancelled) setCountsLoading(false);
-      }
-    })();
+  function openEdit(bundle) {
+    setEditBundleId(bundle?.id ?? null);
+    setEditForm({
+      name: bundle?.name ?? '',
+      duration: String(bundle?.duration_minutes ?? ''),
+      price: String(bundle?.price_ugx ?? ''),
+      description: bundle?.description ?? '',
+    });
+    setEditOpen(true);
+  }
 
-    return () => {
-      cancelled = true;
-      try {
-        controller.abort();
-      } catch {
-        // ignore
-      }
-    };
-  }, [rows]);
+  async function onSaveEdit() {
+    const id = String(editBundleId ?? '').trim();
+    if (!id) return;
+
+    const name = String(editForm.name ?? '').trim();
+    const duration_minutes = parseRequiredInt(editForm.duration);
+    const price_ugx = parseRequiredInt(editForm.price);
+    const description = String(editForm.description ?? '').trim() || null;
+
+    if (!name) {
+      setSnack({ open: true, message: 'Bundle name is required.', severity: 'error' });
+      return;
+    }
+    if (!duration_minutes) {
+      setSnack({ open: true, message: 'Duration (minutes) is required.', severity: 'error' });
+      return;
+    }
+    if (!price_ugx) {
+      setSnack({ open: true, message: 'Price (UGX) is required.', severity: 'error' });
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      await updateBundle(id, { name, duration_minutes, price_ugx, description });
+      setRows((prev) =>
+        prev.map((r) =>
+          String(r?.id) === String(id)
+            ? { ...r, name, duration_minutes, price_ugx, description, updated_at: new Date().toISOString() }
+            : r
+        )
+      );
+      setEditOpen(false);
+      await loadBundles();
+      setSnack({ open: true, message: 'Bundle updated successfully.', severity: 'success' });
+    } catch (err) {
+      const e = extractBackendError(err);
+      setSnack({ open: true, message: e.message || 'Failed to update bundle.', severity: 'error' });
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  async function onToggleStatus(bundle) {
+    const id = String(bundle?.id ?? '').trim();
+    if (!id) return;
+    const isActive = Boolean(bundle?.is_active ?? true);
+    const nextStatus = isActive ? 'disabled' : 'active';
+
+    setStatusLoadingById((s) => ({ ...s, [id]: true }));
+    try {
+      await patchBundleStatus(id, nextStatus);
+      setRows((prev) =>
+        prev.map((r) =>
+          String(r?.id) === String(id)
+            ? { ...r, is_active: nextStatus === 'active', status: nextStatus, updated_at: new Date().toISOString() }
+            : r
+        )
+      );
+      await loadBundles();
+      setSnack({ open: true, message: `Bundle ${nextStatus === 'active' ? 'enabled' : 'disabled'}.`, severity: 'success' });
+    } catch (err) {
+      const e = extractBackendError(err);
+      setSnack({ open: true, message: e.message || 'Failed to update status.', severity: 'error' });
+    } finally {
+      setStatusLoadingById((s) => ({ ...s, [id]: false }));
+    }
+  }
+
+  function openDelete(bundle) {
+    setDeleteTarget(bundle);
+    setDeleteOpen(true);
+  }
+
+  async function onConfirmDelete() {
+    const id = String(deleteTarget?.id ?? '').trim();
+    if (!id) return;
+    setDeleteLoading(true);
+    try {
+      await deleteBundle(id);
+      setRows((prev) => prev.filter((r) => String(r?.id) !== String(id)));
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      await loadBundles();
+      setSnack({ open: true, message: 'Bundle deleted successfully.', severity: 'success' });
+    } catch (err) {
+      const e = extractBackendError(err);
+      setSnack({ open: true, message: e.message || 'Failed to delete bundle.', severity: 'error' });
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
 
   const filteredRows = useMemo(() => {
     const q = String(filters.q ?? '').trim().toLowerCase();
@@ -167,7 +262,7 @@ export default function AdminBundles() {
       if (status === 'disabled' && isActive) return false;
       if (!q) return true;
 
-      const hay = `${r?.id ?? ''} ${r?.name ?? ''} ${r?.mikrotik_profile ?? ''}`.toLowerCase();
+      const hay = `${r?.id ?? ''} ${r?.name ?? ''} ${r?.description ?? ''} ${r?.mikrotik_profile ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [rows, filters]);
@@ -256,15 +351,17 @@ export default function AdminBundles() {
                 borderRadius: 1.5,
                 textTransform: 'none',
               }}
-              onClick={() =>
-                setSnack({
-                  open: true,
-                  message: 'Create bundle is not available yet (backend endpoint not implemented).',
-                  severity: 'info',
-                })
-              }
+              onClick={onCreate}
+              disabled={createLoading}
             >
-              Create Bundle
+              {createLoading ? (
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                  <CircularProgress size={18} sx={{ color: 'white' }} />
+                  <span>Creating…</span>
+                </Stack>
+              ) : (
+                'Create Bundle'
+              )}
             </Button>
           </Stack>
         </Paper>
@@ -392,8 +489,13 @@ export default function AdminBundles() {
               ) : (
                 filteredRows.map((r) => {
                   const isActive = Boolean(r?.is_active ?? true);
-                  const counts = voucherCounts?.[r.id] ?? null;
-                  const vouchersLabel = counts ? `${counts.available} / ${counts.total}` : '— / —';
+                  const vouchersAvailable = r?.vouchers_available;
+                  const vouchersTotal = r?.vouchers_total;
+                  const vouchersLabel =
+                    Number.isFinite(Number(vouchersAvailable)) && Number.isFinite(Number(vouchersTotal))
+                      ? `${Number(vouchersAvailable)} / ${Number(vouchersTotal)}`
+                      : '— / —';
+                  const statusLoading = Boolean(statusLoadingById?.[String(r.id)]);
                   return (
                     <Paper key={r.id} elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', p: 2 }}>
                       <Stack spacing={1.25}>
@@ -442,13 +544,7 @@ export default function AdminBundles() {
                             variant="outlined"
                             size="small"
                             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
-                            onClick={() =>
-                              setSnack({
-                                open: true,
-                                message: 'Edit bundle is not available yet (backend endpoint not implemented).',
-                                severity: 'info',
-                              })
-                            }
+                            onClick={() => openEdit(r)}
                           >
                             Edit
                           </Button>
@@ -457,15 +553,10 @@ export default function AdminBundles() {
                             variant="outlined"
                             size="small"
                             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
-                            onClick={() =>
-                              setSnack({
-                                open: true,
-                                message: 'Enable/Disable bundle is not available yet (backend endpoint not implemented).',
-                                severity: 'info',
-                              })
-                            }
+                            onClick={() => onToggleStatus(r)}
+                            disabled={statusLoading}
                           >
-                            {isActive ? 'Disable' : 'Enable'}
+                            {statusLoading ? 'Updating…' : isActive ? 'Disable' : 'Enable'}
                           </Button>
                           <Button
                             fullWidth
@@ -473,23 +564,11 @@ export default function AdminBundles() {
                             size="small"
                             color="error"
                             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
-                            onClick={() =>
-                              setSnack({
-                                open: true,
-                                message: 'Delete bundle is not available yet (backend endpoint not implemented).',
-                                severity: 'info',
-                              })
-                            }
+                            onClick={() => openDelete(r)}
                           >
                             Delete
                           </Button>
                         </Stack>
-
-                        {countsLoading && !counts ? (
-                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            Updating voucher counts…
-                          </Typography>
-                        ) : null}
                       </Stack>
                     </Paper>
                   );
@@ -499,6 +578,92 @@ export default function AdminBundles() {
           ) : null}
         </Paper>
       </Box>
+
+      {/* Edit Modal */}
+      <Dialog open={editOpen} onClose={() => (editLoading ? null : setEditOpen(false))} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ fontWeight: 900 }}>Edit Bundle</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Bundle Name"
+              value={editForm.name}
+              onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))}
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="Duration (minutes)"
+              value={editForm.duration}
+              onChange={(e) => setEditForm((s) => ({ ...s, duration: e.target.value }))}
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="Price (UGX)"
+              value={editForm.price}
+              onChange={(e) => setEditForm((s) => ({ ...s, price: e.target.value }))}
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="Description"
+              value={editForm.description}
+              onChange={(e) => setEditForm((s) => ({ ...s, description: e.target.value }))}
+              fullWidth
+              size="small"
+              multiline
+              minRows={3}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setEditOpen(false)}
+            disabled={editLoading}
+            sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.5 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={onSaveEdit}
+            disabled={editLoading}
+            sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.5 }}
+          >
+            {editLoading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={deleteOpen} onClose={() => (deleteLoading ? null : setDeleteOpen(false))} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 900 }}>Delete Bundle</DialogTitle>
+        <DialogContent sx={{ pt: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to delete <strong>{deleteTarget?.name ?? 'this bundle'}</strong>? This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteOpen(false)}
+            disabled={deleteLoading}
+            sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.5 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={onConfirmDelete}
+            disabled={deleteLoading}
+            sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.5 }}
+          >
+            {deleteLoading ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snack.open}

@@ -7,6 +7,7 @@ import runtimeRoutes from "./routes/runtimeRoutes.js";
 import captiveRoutes from "./routes/captiveRoutes.js";
 import vouchersRoutes from "./routes/vouchersRoutes.js";
 import packagesRoutes from "./routes/packagesRoutes.js";
+import bundlesRoutes from "./routes/bundlesRoutes.js";
 import portalRoutes from "./routes/portalRoutes.js";
 import portalPageRoutes from "./routes/portalPageRoutes.js";
 import voucherBatchesRoutes from "./routes/voucherBatchesRoutes.js";
@@ -75,6 +76,7 @@ app.use("/api/portal", portalRoutes);
 /* =========================
    BILLING
 ========================= */
+app.use("/api/bundles", bundlesRoutes);
 app.use("/api/packages", packagesRoutes);
 app.use("/api/vouchers", vouchersRoutes);
 app.use("/api/voucher-batches", voucherBatchesRoutes);

@@ -13,7 +13,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { getPackages } from "../services/packages";
+import { listBundles } from '../services/bundles';
 import { uploadVouchersCsv } from '../services/vouchers';
 
 function extractBackendError(err) {
@@ -45,13 +45,12 @@ export default function AdminVoucherUpload() {
     setPackagesLoading(true);
     setPackagesError(null);
     try {
-      const res = await getPackages();
-      const data = res.data;
-      console.debug('[AdminVoucherUpload] packages data', data);
+      const data = await listBundles({ status: 'active' });
+      console.debug('[AdminVoucherUpload] bundles data', data);
       if (cancelled) return;
       setPackages(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.debug('[AdminVoucherUpload] packages error', err);
+      console.debug('[AdminVoucherUpload] bundles error', err);
       if (cancelled) return;
       setPackagesError(extractBackendError(err));
     } finally {

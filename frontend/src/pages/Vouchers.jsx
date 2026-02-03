@@ -19,7 +19,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { getPackages } from '../services/packages';
+import { listBundles } from '../services/bundles';
 import { getVoucherBatches } from '../services/batches';
 import { listVouchers } from '../services/vouchers';
 
@@ -130,10 +130,10 @@ export default function Vouchers() {
 
     async function loadFilters() {
       try {
-        const [pkgRes, batchRes] = await Promise.all([getPackages(), getVoucherBatches()]);
+        const [pkgData, batchRes] = await Promise.all([listBundles(), getVoucherBatches()]);
         if (cancelled) return;
 
-        setPackages(Array.isArray(pkgRes.data) ? pkgRes.data : []);
+        setPackages(Array.isArray(pkgData) ? pkgData : []);
 
         const batchPayload = batchRes.data;
         const batchRows = Array.isArray(batchPayload?.data) ? batchPayload.data : [];

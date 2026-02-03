@@ -25,8 +25,12 @@ export async function listPackages(req, res) {
 
     const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
     const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
+    const hasDeletedAt = await hasPublicTableColumn({ table: 'packages', column: 'deleted_at' });
 
-    const whereActive = hasIsActive ? 'WHERE is_active = TRUE' : '';
+    const whereParts = [];
+    if (hasIsActive) whereParts.push('is_active = TRUE');
+    if (hasDeletedAt) whereParts.push('deleted_at IS NULL');
+    const whereActive = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
     const result = await query(
       `
@@ -57,6 +61,7 @@ export async function listPackagesFull(req, res) {
 
     const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
     const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
+    const hasDeletedAt = await hasPublicTableColumn({ table: 'packages', column: 'deleted_at' });
 
     const result = await query(
       `
@@ -69,6 +74,7 @@ export async function listPackagesFull(req, res) {
         ${hasIsActive ? 'is_active' : 'TRUE AS is_active'},
         created_at
       FROM packages
+      ${hasDeletedAt ? 'WHERE deleted_at IS NULL' : ''}
       ORDER BY duration_minutes ASC, id ASC
       `
     );

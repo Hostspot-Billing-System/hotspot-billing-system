@@ -20,7 +20,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { getPackages } from '../services/packages';
+import { listBundles } from '../services/bundles';
 import { getVoucherBatches } from '../services/voucherBatches';
 import { listVouchers } from '../services/vouchers';
 
@@ -94,13 +94,10 @@ export default function AdminVoucherList({ initialFilters }) {
 
     async function loadFilterData() {
       try {
-        const [pkgRes, batchRes] = await Promise.all([
-          getPackages(),
-          getVoucherBatches({ page: 1, limit: 200 }),
-        ]);
+        const [pkgData, batchRes] = await Promise.all([listBundles(), getVoucherBatches({ page: 1, limit: 200 })]);
 
         if (cancelled) return;
-        setPackages(Array.isArray(pkgRes.data) ? pkgRes.data : []);
+        setPackages(Array.isArray(pkgData) ? pkgData : []);
         setBatches(Array.isArray(batchRes.data?.data) ? batchRes.data.data : []);
       } catch (err) {
         if (cancelled) return;

@@ -147,6 +147,22 @@ async function main() {
     console.warn("Table 'transactions' not found. Skipping transactions migrations.");
   }
 
+  // 5) packages: full bundle fields (description + updated_at)
+  if (await tableExists('packages')) {
+    const needsDescription = !(await columnExists('packages', 'description'));
+    const needsUpdatedAt = !(await columnExists('packages', 'updated_at'));
+    if (needsDescription || needsUpdatedAt) {
+      await applySqlFile('../sql/migrations/20260203_001_extend_packages_for_bundles.sql');
+    }
+
+    const needsDeletedAt = !(await columnExists('packages', 'deleted_at'));
+    if (needsDeletedAt) {
+      await applySqlFile('../sql/migrations/20260203_002_add_packages_deleted_at.sql');
+    }
+  } else {
+    console.warn("Table 'packages' not found. Skipping packages migrations.");
+  }
+
   console.log('Missing migrations check: done');
 }
 

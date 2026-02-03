@@ -28,7 +28,7 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import Autocomplete from '@mui/material/Autocomplete';
-import { getPackages } from '../services/packages';
+import { listBundles } from '../services/bundles';
 import { deleteVoucherById, listVouchers, uploadVouchersCsv } from '../services/vouchers';
 
 function extractBackendError(err) {
@@ -215,9 +215,10 @@ export default function AdminVouchers() {
       setPackagesLoading(true);
       setPackagesError(null);
       try {
-        const res = await getPackages();
         if (cancelled) return;
-        setPackages(Array.isArray(res.data) ? res.data : []);
+        const data = await listBundles();
+        if (cancelled) return;
+        setPackages(Array.isArray(data) ? data : []);
       } catch (err) {
         if (cancelled) return;
         setPackagesError(extractBackendError(err));

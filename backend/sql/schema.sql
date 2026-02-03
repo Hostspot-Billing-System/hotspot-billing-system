@@ -19,11 +19,31 @@ CREATE TABLE IF NOT EXISTS packages (
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
   mikrotik_profile TEXT NOT NULL,
   price_ugx         INTEGER NULL,
+  description      TEXT NULL,
   is_active         BOOLEAN NOT NULL DEFAULT TRUE,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at       TIMESTAMPTZ NULL,
 
   CONSTRAINT packages_name_unique UNIQUE (name)
 );
+
+-- Keep packages.updated_at current on edits.
+CREATE OR REPLACE FUNCTION set_packages_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_set_packages_updated_at ON packages;
+CREATE TRIGGER trg_set_packages_updated_at
+BEFORE UPDATE ON packages
+FOR EACH ROW
+EXECUTE FUNCTION set_packages_updated_at();
 
 CREATE TABLE IF NOT EXISTS voucher_batches (
   id          BIGSERIAL PRIMARY KEY,

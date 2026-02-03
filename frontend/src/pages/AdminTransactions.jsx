@@ -24,7 +24,7 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 
-import { getPackages } from '../services/packages';
+import { listBundles } from '../services/bundles';
 import { exportTransactionsCSV, fetchAdminTransactions } from '../api/transactions';
 import TransactionDetailsModal from '../components/TransactionDetailsModal';
 
@@ -132,8 +132,7 @@ export default function AdminTransactions() {
     let cancelled = false;
     (async () => {
       try {
-        const response = await getPackages();
-        const list = Array.isArray(response?.data) ? response.data : [];
+        const list = await listBundles();
         if (!cancelled) setPackages(list);
       } catch {
         if (!cancelled) setPackages([]);
