@@ -19,22 +19,22 @@ export async function getAdminDashboardMetrics(req, res) {
         (
           SELECT COUNT(*)::int
           FROM transactions t
-          WHERE t.payment_method = 'MOBILE_MONEY'
+          WHERE UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'
         ) AS total_mobile_money_transactions,
 
         (
           SELECT COUNT(*)::int
           FROM transactions t
-          WHERE t.status = 'completed'
-            AND t.payment_method = 'MOBILE_MONEY'
+          WHERE t.status IN ('completed', 'success')
+            AND UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'
             AND t.created_at >= (SELECT ts FROM today_start)
         ) AS successful_transactions_today,
 
         (
           SELECT COALESCE(SUM(t.amount_ugx), 0)::numeric(14,2)
           FROM transactions t
-          WHERE t.status = 'completed'
-            AND t.payment_method = 'MOBILE_MONEY'
+          WHERE t.status IN ('completed', 'success')
+            AND UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'
             AND t.created_at >= (SELECT ts FROM today_start)
         ) AS today_revenue_ugx,
 
@@ -54,9 +54,21 @@ export async function getAdminDashboardMetrics(req, res) {
           SELECT COUNT(*)::int
           FROM transactions t
           WHERE t.status = 'failed'
-            AND t.payment_method = 'MOBILE_MONEY'
+            AND UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'
+            AND t.customer_phone IS NOT NULL
+            AND t.bundle_id IS NOT NULL
             AND t.created_at >= (SELECT ts FROM today_start)
-        ) AS failed_transactions_today
+        ) AS failed_transactions_today,
+
+        (
+          SELECT COALESCE(SUM(t.amount_ugx), 0)::numeric(14,2)
+          FROM transactions t
+          WHERE t.status = 'failed'
+            AND UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'
+            AND t.customer_phone IS NOT NULL
+            AND t.bundle_id IS NOT NULL
+            AND t.created_at >= (SELECT ts FROM today_start)
+        ) AS failed_amount_today_ugx
       `
     );
 
@@ -69,6 +81,7 @@ export async function getAdminDashboardMetrics(req, res) {
       voucher_stock_available: Number(row.voucher_stock_available ?? 0),
       total_withdrawals_ugx: row.total_withdrawals_ugx == null ? '0.00' : String(row.total_withdrawals_ugx),
       failed_transactions_today: Number(row.failed_transactions_today ?? 0),
+      failed_amount_today_ugx: row.failed_amount_today_ugx == null ? '0.00' : String(row.failed_amount_today_ugx),
       sms_status: getSmsStatus(),
     });
   } catch (err) {
@@ -95,7 +108,7 @@ export async function getAdminDashboardRecentTransactions(req, res) {
         COALESCE(t.bundle_name, p.name) AS bundle_name
       FROM transactions t
       LEFT JOIN packages p ON p.id = t.bundle_id
-      WHERE t.payment_method = 'MOBILE_MONEY'
+      WHERE UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'
       ORDER BY t.created_at DESC, t.id DESC
       LIMIT 10
       `
@@ -106,7 +119,11 @@ export async function getAdminDashboardRecentTransactions(req, res) {
       reference: row.reference,
       customer_phone: row.customer_phone ?? null,
       amount_ugx: row.amount_ugx == null ? '0.00' : String(row.amount_ugx),
-      status: String(row.status ?? '').toLowerCase() === 'completed' ? 'success' : row.status,
+      status: (() => {
+        const s = String(row.status ?? '').toLowerCase();
+        if (s === 'completed' || s === 'success') return 'success';
+        return row.status;
+      })(),
       bundle_name: row.bundle_name ?? null,
       reason: row.failure_reason ?? null,
     }));

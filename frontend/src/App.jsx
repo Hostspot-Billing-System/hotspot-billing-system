@@ -49,6 +49,12 @@ export default function App() {
       return <PortalHome />;
     }
 
+    // Quick Action aliases (logic-only)
+    if (path === '/vouchers') return <AdminVouchers />;
+    if (path === '/bundles') return <AdminBundles />;
+    if (path === '/transactions') return <AdminTransactions />;
+    if (path === '/reports') return <BatchHistory />;
+
     if (path === '/admin' || path === '/admin/dashboard') return <AdminDashboard />;
     if (path === '/admin/bundles') return <AdminBundles />;
     if (path === '/admin/transactions') return <AdminTransactions />;
@@ -56,6 +62,7 @@ export default function App() {
     if (path === '/admin/voucher-upload') return <AdminVoucherUpload />;
     if (path === '/admin/batches') return <BatchHistory />;
     if (path === '/admin/vouchers') return <AdminVouchers />;
+    if (path === '/admin/reports') return <BatchHistory />;
 
     // Default to admin dashboard for unknown paths
     if (path?.startsWith('/admin')) return <AdminDashboard />;

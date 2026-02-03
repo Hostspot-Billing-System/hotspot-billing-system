@@ -321,6 +321,15 @@ export class TransactionsService {
     const bundleId = parseOptionalPositiveInt(bundle_id, 'bundle_id');
     if (!bundleId) throw new DomainError('BAD_REQUEST', 'bundle_id must be a valid number', 400);
 
+    // Canonical (official) pricing catalog.
+    const OFFICIAL_BY_DURATION = new Map([
+      [120, 500],
+      [720, 1000],
+      [1440, 1500],
+      [10080, 6000],
+      [43200, 23000],
+    ]);
+
 	// Transaction-safe schema tolerance: avoid errors that would abort the transaction.
 	const hasIsActive = await hasPublicTableColumn(client, { table: 'packages', column: 'is_active' });
 	const hasPriceUgx = await hasPublicTableColumn(client, { table: 'packages', column: 'price_ugx' });
@@ -351,18 +360,29 @@ export class TransactionsService {
 		throw new DomainError('BUNDLE_INACTIVE', 'Bundle is inactive', 409);
 	}
 
-  if (!hasPriceUgx) {
-    throw new DomainError('BUNDLE_PRICE_MISSING', 'Bundle price is missing', 500);
+  const durationMinutes = row.duration_minutes == null ? null : Number(row.duration_minutes);
+  const officialPrice = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
+  if (durationMinutes == null || !Number.isFinite(durationMinutes) || durationMinutes <= 0 || officialPrice == null) {
+    throw new DomainError('BUNDLE_NOT_CONFIGURED', 'Bundle is not configured', 500);
   }
-  const price = row.price_ugx == null ? null : Number(row.price_ugx);
-  if (price == null || !Number.isFinite(price) || price <= 0) {
-    throw new DomainError('BUNDLE_PRICE_MISSING', 'Bundle price is missing', 500);
+
+  // If price_ugx exists, require it (when set) matches canonical pricing.
+  const dbPrice = row.price_ugx == null ? null : Number(row.price_ugx);
+  if (hasPriceUgx) {
+    if (dbPrice == null || !Number.isFinite(dbPrice) || dbPrice <= 0) {
+      throw new DomainError('BUNDLE_PRICE_MISSING', 'Bundle price is missing', 500);
+    }
+    if (Number(dbPrice) !== Number(officialPrice)) {
+      throw new DomainError('BUNDLE_PRICE_MISMATCH', 'Bundle is not configured', 500);
+    }
   }
+
+  const price = hasPriceUgx ? Number(dbPrice) : Number(officialPrice);
 
 	return {
 		id: Number(row.id),
 		name: row.name,
-		duration_minutes: Number(row.duration_minutes),
+    duration_minutes: Number(durationMinutes),
 		price_ugx: Number(price),
 	};
   }

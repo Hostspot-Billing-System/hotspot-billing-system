@@ -898,12 +898,20 @@ export async function postPortalBuyBundleHandler(req, res) {
 
 		const hasIsActive = await hasPublicTableColumn({ table: 'packages', column: 'is_active' });
 		const hasPriceUgx = await hasPublicTableColumn({ table: 'packages', column: 'price_ugx' });
-		if (!hasPriceUgx) {
-			return res.status(200).json({ success: false, error: 'Bundles are not configured for pricing' });
-		}
 
 		dbClient = await pool.connect();
 		await dbClient.query('BEGIN');
+
+		const columns = [
+			'id::int AS id',
+			'name',
+			'duration_minutes::int AS duration_minutes',
+			'mikrotik_profile',
+			hasPriceUgx ? 'price_ugx::int AS price_ugx' : null,
+			// NOTE: is_active is only used in WHERE clause below.
+		]
+			.filter(Boolean)
+			.join(', ');
 
 		let packageRow = null;
 		if (bundleIdRaw != null && String(bundleIdRaw).trim() !== '') {
@@ -915,7 +923,7 @@ export async function postPortalBuyBundleHandler(req, res) {
 			const whereActive = hasIsActive ? 'AND is_active = TRUE' : '';
 			const resPkg = await dbClient.query(
 				`
-				SELECT id::int AS id, name, duration_minutes::int AS duration_minutes, mikrotik_profile, price_ugx::int AS price_ugx
+				SELECT ${columns}
 				FROM packages
 				WHERE id = $1::bigint
 				${whereActive}
@@ -929,7 +937,7 @@ export async function postPortalBuyBundleHandler(req, res) {
 			const whereActive = hasIsActive ? 'AND is_active = TRUE' : '';
 			const resPkg = await dbClient.query(
 				`
-				SELECT id::int AS id, name, duration_minutes::int AS duration_minutes, mikrotik_profile, price_ugx::int AS price_ugx
+				SELECT ${columns}
 				FROM packages
 				WHERE (
 					LOWER(name) = LOWER($1)
@@ -951,12 +959,14 @@ export async function postPortalBuyBundleHandler(req, res) {
 
 		const durationMinutes = Number(packageRow.duration_minutes ?? 0);
 		const official = OFFICIAL_BY_DURATION.get(Number(durationMinutes));
-		const priceUgx = packageRow.price_ugx == null ? null : Number(packageRow.price_ugx);
+		const rawDbPriceUgx = packageRow.price_ugx == null ? null : Number(packageRow.price_ugx);
+		const priceUgx = hasPriceUgx && rawDbPriceUgx != null && Number.isFinite(rawDbPriceUgx) ? Number(rawDbPriceUgx) : Number(official?.price_ugx);
 		if (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || !official || priceUgx == null || !Number.isFinite(priceUgx)) {
 			await dbClient.query('ROLLBACK');
 			return res.status(200).json({ success: false, error: 'Bundle is not configured' });
 		}
-		if (Number(priceUgx) !== Number(official.price_ugx)) {
+		// If DB has explicit pricing, enforce it matches canonical pricing.
+		if (hasPriceUgx && rawDbPriceUgx != null && Number.isFinite(rawDbPriceUgx) && Number(rawDbPriceUgx) !== Number(official.price_ugx)) {
 			await dbClient.query('ROLLBACK');
 			return res.status(200).json({ success: false, error: 'Bundle is not configured' });
 		}

@@ -141,6 +141,12 @@ function SectionHeader({ title, right }) {
   );
 }
 
+function navigateTo(path) {
+  if (typeof window === 'undefined') return;
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState(null);
@@ -148,6 +154,17 @@ export default function AdminDashboard() {
   const [recent, setRecent] = useState([]);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'error' });
   const [showRenewalReminder, setShowRenewalReminder] = useState(true);
+
+  const quickActionRoutes = useMemo(
+    () => ({
+      uploadVouchers: '/vouchers',
+      createBundle: '/bundles',
+      viewTransactions: '/transactions',
+      viewReports: '/reports',
+      // changePassword: intentionally left untouched
+    }),
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -416,7 +433,10 @@ export default function AdminDashboard() {
               <Button
                 key={action.key}
                 variant="contained"
-                onClick={() => console.log(`[dashboard] action: ${action.key}`)}
+                onClick={() => {
+                  const route = quickActionRoutes?.[action.key];
+                  if (route) navigateTo(route);
+                }}
                 sx={{
                   justifyContent: 'center',
                   textTransform: 'none',

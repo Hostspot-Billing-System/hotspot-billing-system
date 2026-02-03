@@ -90,7 +90,7 @@ export async function listAdminTransactions(req, res) {
     const params = [];
 
     // Strict rule: admin transactions represent mobile money only.
-    conditions.push(`t.payment_method = 'MOBILE_MONEY'`);
+    conditions.push(`UPPER(COALESCE(t.payment_method, '')) = 'MOBILE_MONEY'`);
 
     if (q) {
       params.push(`%${q}%`);
