@@ -194,7 +194,8 @@ export default function AdminBundles() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '520px 1fr' },
+          // Narrower left column so the right table/cards have more room on laptops.
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(360px, 440px) 1fr' },
           gap: 2,
           alignItems: 'start',
         }}
