@@ -8,6 +8,7 @@ import AdminVoucherUpload from './pages/AdminVoucherUpload';
 import AdminVouchers from './pages/AdminVouchers';
 import BatchHistory from './pages/BatchHistory';
 import AdminReports from './pages/AdminReports.jsx';
+import AdminClients from './pages/AdminClients.jsx';
 import PortalHome from './portal/PortalHome.jsx';
 
 function getPath() {
@@ -55,6 +56,7 @@ export default function App() {
     if (path === '/bundles') return <AdminBundles />;
     if (path === '/transactions') return <AdminTransactions />;
     if (path === '/reports') return <AdminReports />;
+    if (path === '/clients') return <AdminClients />;
 
     if (path === '/admin' || path === '/admin/dashboard') return <AdminDashboard />;
     if (path === '/admin/bundles') return <AdminBundles />;
@@ -64,6 +66,7 @@ export default function App() {
     if (path === '/admin/batches') return <BatchHistory />;
     if (path === '/admin/vouchers') return <AdminVouchers />;
     if (path === '/admin/reports') return <AdminReports />;
+    if (path === '/admin/clients') return <AdminClients />;
 
     // Default to admin dashboard for unknown paths
     if (path?.startsWith('/admin')) return <AdminDashboard />;

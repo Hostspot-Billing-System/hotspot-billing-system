@@ -16,6 +16,7 @@ import withdrawalsRoutes from "./routes/withdrawalsRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import mikrotikRoutes from "./routes/mikrotikRoutes.js";
 import reportsRoutes from "./routes/reportsRoutes.js";
+import clientsRoutes from "./routes/clientsRoutes.js";
 
 const app = express();
 
@@ -84,6 +85,7 @@ app.use("/api/voucher-batches", voucherBatchesRoutes);
 app.use("/api/transactions", transactionsRoutes);
 app.use("/api/withdrawals", withdrawalsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/clients", clientsRoutes);
 
 /* =========================
    ADMIN & MIKROTIK
