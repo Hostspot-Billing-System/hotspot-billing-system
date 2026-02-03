@@ -15,7 +15,7 @@ export const ADMIN_SIDEBAR_MENU = [
     dividerAfter: true,
     path: '/admin/mikrotik-routers',
   },
-  { key: 'routerStatus', label: 'Router Status', icon: 'status', path: '/admin/router-status' },
+  { key: 'routerStatus', label: 'Router Status', icon: 'status', locked: true, path: '/admin/router-status' },
   {
     key: 'hotspotProfiles',
     label: 'Hotspot Profiles',
@@ -42,9 +42,10 @@ export const ADMIN_SIDEBAR_MENU = [
     label: 'Hotspot Page Generator',
     icon: 'page',
     spacerBefore: true,
+    locked: true,
     path: '/admin/hotspot-page-generator',
   },
-  { key: 'activeSessions', label: 'Active Sessions', icon: 'sessions', path: '/admin/active-sessions' },
+  { key: 'activeSessions', label: 'Active Sessions', icon: 'sessions', locked: true, path: '/admin/active-sessions' },
   { key: 'myProfile', label: 'My Profile', icon: 'profile', path: '/admin/my-profile' },
   { key: 'logout', label: 'Logout', icon: 'logout', path: '/admin/logout' },
 ];
