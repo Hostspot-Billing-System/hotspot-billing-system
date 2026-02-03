@@ -31,6 +31,21 @@ const theme = createTheme({
       'sans-serif',
     ].join(','),
   },
+
+  // Global UI behavior: center all popup dialogs.
+  components: {
+    MuiDialog: {
+      styleOverrides: {
+        container: {
+          // Works for both scroll="paper" and scroll="body".
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16,
+        },
+      },
+    },
+  },
 });
 
 ReactDOM.createRoot(document.getElementById("root")).render(
