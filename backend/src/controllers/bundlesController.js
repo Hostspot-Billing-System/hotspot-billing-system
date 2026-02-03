@@ -152,6 +152,51 @@ export async function createBundle(req, res) {
 
     const hasDescription = await hasPublicTableColumn({ table: 'packages', column: 'description' });
     const hasUpdatedAt = await hasPublicTableColumn({ table: 'packages', column: 'updated_at' });
+    const hasDeletedAt = await hasPublicTableColumn({ table: 'packages', column: 'deleted_at' });
+
+    // If this DB supports soft-delete and a bundle with this name exists but was deleted,
+    // restore it instead of failing on UNIQUE(name).
+    if (hasDeletedAt) {
+      const existing = await query(
+        `
+        SELECT id, deleted_at
+        FROM packages
+        WHERE name = $1
+        LIMIT 1
+        `,
+        [name]
+      );
+
+      const row = existing.rows?.[0] ?? null;
+      if (row?.id && row?.deleted_at) {
+        const setParts = ['duration_minutes = $2', 'price_ugx = $3', 'is_active = TRUE', 'deleted_at = NULL'];
+        const restoreParams = [Number(row.id), duration_minutes, price_ugx];
+
+        if (hasDescription) {
+          setParts.push(`description = $${restoreParams.length + 1}`);
+          restoreParams.push(description);
+        }
+
+        if (hasUpdatedAt) {
+          setParts.push('updated_at = NOW()');
+        }
+
+        const restored = await query(
+          `
+          UPDATE packages
+          SET ${setParts.join(', ')}, mikrotik_profile = CONCAT('hotspot_', id)
+          WHERE id = $1::bigint
+          RETURNING id::text AS id
+          `,
+          restoreParams
+        );
+
+        const id = restored.rows?.[0]?.id;
+        if (id) {
+          return res.status(201).json({ success: true, id: String(id) });
+        }
+      }
+    }
 
     // NOTE: mikrotik_profile is required by schema.
     // Phase F convention across the backend is `hotspot_{bundle_id}`.
@@ -193,6 +238,61 @@ export async function createBundle(req, res) {
     return res.status(201).json({ success: true, id: String(id) });
   } catch (err) {
     if (err?.code === '23505') {
+      // If bundles are soft-deleted (deleted_at), allow re-creating a bundle with the same
+      // name by restoring the previously deleted row.
+      try {
+        const hasDeletedAt = await hasPublicTableColumn({ table: 'packages', column: 'deleted_at' });
+        if (hasDeletedAt) {
+          const existing = await query(
+            `
+            SELECT id, deleted_at
+            FROM packages
+            WHERE name = $1
+            LIMIT 1
+            `,
+            [name]
+          );
+
+          const row = existing.rows?.[0] ?? null;
+          if (row?.id && row?.deleted_at) {
+            const hasDescription = await hasPublicTableColumn({ table: 'packages', column: 'description' });
+            const hasUpdatedAt = await hasPublicTableColumn({ table: 'packages', column: 'updated_at' });
+
+            const setParts = ['duration_minutes = $2', 'price_ugx = $3', 'is_active = TRUE', 'deleted_at = NULL'];
+            const params = [Number(row.id), duration_minutes, price_ugx];
+
+            if (hasDescription) {
+              setParts.push(`description = $${params.length + 1}`);
+              params.push(description);
+            }
+
+            if (hasUpdatedAt) {
+              setParts.push('updated_at = NOW()');
+            }
+
+            const restored = await query(
+              `
+              UPDATE packages
+              SET ${setParts.join(', ')}, mikrotik_profile = CONCAT('hotspot_', id)
+              WHERE id = $1::bigint
+              RETURNING id::text AS id
+              `,
+              params
+            );
+
+            const id = restored.rows?.[0]?.id;
+            if (id) {
+              return res.status(201).json({ success: true, id: String(id) });
+            }
+          }
+        }
+      } catch (restoreErr) {
+        console.warn('[Bundles] createBundle restore attempt failed', {
+          code: restoreErr?.code ?? null,
+          message: restoreErr?.message ?? String(restoreErr),
+        });
+      }
+
       return res.status(409).json({ success: false, error: { code: 'CONFLICT', message: 'Bundle name already exists' } });
     }
     console.error('[Bundles] createBundle failed', { code: err?.code ?? null, message: err?.message ?? String(err) });

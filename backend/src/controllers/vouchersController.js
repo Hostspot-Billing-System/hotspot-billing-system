@@ -1,5 +1,6 @@
 import { VoucherUploadService, toHttpError } from '../services/voucherUploadService.js';
 import { VouchersService, toHttpError as toHttpErrorVouchers } from '../services/vouchersService.js';
+import { sendVoucherDirectSaleSms } from '../services/smsService.js';
 
 export async function uploadVouchersCsv(req, res) {
   try {
@@ -104,6 +105,47 @@ export async function verifyVoucher(req, res) {
     return res.status(200).json({
       success: true,
       data,
+    });
+  } catch (err) {
+    const { httpStatus, body } = toHttpErrorVouchers(err);
+    return res.status(httpStatus).json(body);
+  }
+}
+
+export async function sellVoucherDirectly(req, res) {
+  try {
+    console.info('POST /api/vouchers/:id/direct-sale');
+
+    const id = req.params?.id;
+    const phone_number = req.body?.phone_number;
+    const customer_name = req.body?.customer_name;
+    const notes = req.body?.notes;
+
+    const result = await VouchersService.sellVoucherDirectlyById({
+      id,
+      phone_number,
+      customer_name,
+      notes,
+    });
+
+    // SMS is best-effort. Never rollback on failure.
+    try {
+      const sms = await sendVoucherDirectSaleSms({
+        to: result?.voucher?.used_by ?? phone_number,
+        voucherCode: result?.voucher?.code,
+        bundleName: result?.voucher?.package_name,
+        priceUgx: result?.voucher?.price_ugx,
+      });
+      if (!sms?.ok) {
+        console.warn('[sms] direct sale sms failed:', sms?.error ?? 'unknown');
+      }
+    } catch (err) {
+      console.warn('[sms] direct sale sms exception:', err?.message ?? err);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result,
     });
   } catch (err) {
     const { httpStatus, body } = toHttpErrorVouchers(err);

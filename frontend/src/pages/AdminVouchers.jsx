@@ -29,7 +29,7 @@ import {
 import { alpha } from '@mui/material/styles';
 import Autocomplete from '@mui/material/Autocomplete';
 import { listBundles } from '../services/bundles';
-import { deleteVoucherById, listVouchers, uploadVouchersCsv } from '../services/vouchers';
+import { bulkDeleteVouchersByIds, deleteVoucherById, listVouchers, sellVoucherDirectlyById, uploadVouchersCsv } from '../services/vouchers';
 
 function extractBackendError(err) {
   const data = err?.response?.data;
@@ -208,6 +208,17 @@ export default function AdminVouchers() {
 
   const [deleteDialog, setDeleteDialog] = useState({ open: false, deleting: false, row: null });
 
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState({ open: false, deleting: false, count: 0 });
+
+  const [sellDialog, setSellDialog] = useState({
+    open: false,
+    selling: false,
+    row: null,
+    phone: '',
+    name: '',
+    notes: '',
+  });
+
   useEffect(() => {
     let cancelled = false;
 
@@ -273,6 +284,12 @@ export default function AdminVouchers() {
   const packageOptions = useMemo(() => {
     return packages.map((p) => ({ id: p.id, name: p.name }));
   }, [packages]);
+
+  const selectedPackageMeta = useMemo(() => {
+    const pkgId = selectedPackage?.id;
+    if (!pkgId) return null;
+    return packages.find((p) => Number(p?.id) === Number(pkgId)) ?? null;
+  }, [packages, selectedPackage?.id]);
 
   const stats = useMemo(() => {
     const total = vouchers.length;
@@ -458,6 +475,116 @@ export default function AdminVouchers() {
   const allVisibleSelected =
     visibleRows.length > 0 && visibleRows.every((r) => selectedCodes.has(String(r.code)));
   const anySelected = selectedCodes.size > 0;
+  const selectedCount = selectedCodes.size;
+
+  function getSelectedVoucherIds() {
+    const byCode = new Map();
+    for (const v of vouchers) {
+      const code = String(v?.code ?? '');
+      if (!code) continue;
+      if (v?.id != null) byCode.set(code, Number(v.id));
+    }
+
+    const ids = [];
+    for (const code of selectedCodes) {
+      const id = byCode.get(String(code));
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+
+  function openBulkDeleteDialog() {
+    if (!anySelected) return;
+    setBulkDeleteDialog({ open: true, deleting: false, count: selectedCount });
+  }
+
+  async function confirmBulkDelete() {
+    const ids = getSelectedVoucherIds();
+    if (ids.length === 0) {
+      setSnack({ open: true, message: 'No vouchers selected', severity: 'error' });
+      setBulkDeleteDialog({ open: false, deleting: false, count: 0 });
+      return;
+    }
+
+    setBulkDeleteDialog((s) => ({ ...s, deleting: true }));
+    try {
+      await bulkDeleteVouchersByIds(ids);
+      setVouchers((prev) => prev.filter((v) => !ids.includes(Number(v?.id))));
+      setSelectedCodes(new Set());
+      setSnack({ open: true, message: `Deleted ${ids.length} voucher(s)`, severity: 'success' });
+      setBulkDeleteDialog({ open: false, deleting: false, count: 0 });
+    } catch (err) {
+      const e = extractBackendError(err);
+      setSnack({ open: true, message: e.message || 'Failed to delete selected vouchers', severity: 'error' });
+      setBulkDeleteDialog((s) => ({ ...s, deleting: false }));
+    }
+  }
+
+  function normalizeUgPhone(raw) {
+    const digits = String(raw ?? '').replace(/\D/g, '');
+    if (!digits) return null;
+    if (digits.startsWith('256') && digits.length === 12) return `+${digits}`;
+    if (digits.startsWith('0') && digits.length === 10 && digits[1] === '7') return `+256${digits.slice(1)}`;
+    if (digits.length === 9 && digits[0] === '7') return `+256${digits}`;
+    return null;
+  }
+
+  function openSellDialog(row) {
+    const id = row?.id;
+    const status = String(row?.status ?? '').toLowerCase();
+    if (!id) {
+      setSnack({ open: true, message: 'Cannot sell: missing voucher id', severity: 'error' });
+      return;
+    }
+    if (status && status !== 'available') {
+      setSnack({ open: true, message: 'Only available vouchers can be sold', severity: 'error' });
+      return;
+    }
+
+    setSellDialog({ open: true, selling: false, row, phone: '', name: '', notes: '' });
+  }
+
+  async function confirmSellVoucher() {
+    const row = sellDialog.row;
+    const id = row?.id;
+    if (!id) {
+      setSnack({ open: true, message: 'Cannot sell: missing voucher id', severity: 'error' });
+      setSellDialog({ open: false, selling: false, row: null, phone: '', name: '', notes: '' });
+      return;
+    }
+
+    const normalizedPhone = normalizeUgPhone(sellDialog.phone);
+    if (!normalizedPhone) {
+      setSnack({ open: true, message: 'Customer phone number is required (UG format)', severity: 'error' });
+      return;
+    }
+
+    setSellDialog((s) => ({ ...s, selling: true }));
+    try {
+      const res = await sellVoucherDirectlyById(id, {
+        phone_number: normalizedPhone,
+        customer_name: sellDialog.name,
+        notes: sellDialog.notes,
+      });
+
+      const usedAt = res?.data?.voucher?.used_at ?? new Date().toISOString();
+      const usedBy = res?.data?.voucher?.used_by ?? normalizedPhone;
+
+      setVouchers((prev) =>
+        prev.map((v) => {
+          if (Number(v?.id) !== Number(id)) return v;
+          return { ...v, status: 'used', used_at: usedAt, used_by: usedBy };
+        })
+      );
+
+      setSnack({ open: true, message: 'Voucher sold successfully', severity: 'success' });
+      setSellDialog({ open: false, selling: false, row: null, phone: '', name: '', notes: '' });
+    } catch (err) {
+      const e = extractBackendError(err);
+      setSnack({ open: true, message: e.message || 'Failed to sell voucher', severity: 'error' });
+      setSellDialog((s) => ({ ...s, selling: false }));
+    }
+  }
 
   return (
     <Box sx={{ width: '100%', pt: 1, pb: 5, px: 0 }}>
@@ -917,7 +1044,7 @@ export default function AdminVouchers() {
                   <Button
                     variant="contained"
                     disabled={!anySelected}
-                    onClick={() => console.log('[vouchers] delete selected (placeholder)', Array.from(selectedCodes))}
+                    onClick={openBulkDeleteDialog}
                     startIcon={<Icon path={ICONS.trash} size={16} color="#fff" />}
                     sx={{
                       textTransform: 'none',
@@ -929,7 +1056,7 @@ export default function AdminVouchers() {
                       '&:hover': { bgcolor: '#ef4444' },
                     }}
                   >
-                    Delete Selected
+                    {selectedCount > 0 ? `Delete (${selectedCount})` : 'Delete Selected'}
                   </Button>
                 </Box>
 
@@ -1006,7 +1133,9 @@ export default function AdminVouchers() {
                                 />
                               </TableCell>
                               <TableCell sx={{ fontWeight: 900, color: '#2563eb' }}>{code}</TableCell>
-                              <TableCell sx={{ fontStyle: 'italic', color: 'text.secondary' }}>Not used</TableCell>
+                              <TableCell sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                                {r?.used_by ? String(r.used_by) : 'Not used'}
+                              </TableCell>
                               <TableCell>
                                 <StatusPill status={r.status} />
                               </TableCell>
@@ -1039,7 +1168,7 @@ export default function AdminVouchers() {
                                   <Button
                                     size="small"
                                     variant="contained"
-                                    onClick={() => console.log('[vouchers] view', code)}
+                                    onClick={() => openSellDialog(r)}
                                     sx={{
                                       minWidth: 34,
                                       px: 0,
@@ -1195,6 +1324,217 @@ export default function AdminVouchers() {
             }}
           >
             {deleteDialog.deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={bulkDeleteDialog.open}
+        onClose={() => (bulkDeleteDialog.deleting ? null : setBulkDeleteDialog({ open: false, deleting: false, count: 0 }))}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 20px 60px rgba(2, 6, 23, 0.25)',
+          },
+        }}
+      >
+        <DialogContent sx={{ p: 3 }}>
+          <Typography sx={{ fontWeight: 900, fontSize: 18, mb: 0.75, color: '#0f172a' }}>
+            Delete selected vouchers?
+          </Typography>
+
+          <Typography sx={{ color: '#475569', fontSize: 13, lineHeight: 1.5 }}>
+            You are about to delete {bulkDeleteDialog.count} vouchers. This action cannot be undone.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button
+            variant="outlined"
+            disabled={bulkDeleteDialog.deleting}
+            onClick={() => setBulkDeleteDialog({ open: false, deleting: false, count: 0 })}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 1.5,
+              borderColor: '#cbd5e1',
+              color: '#0f172a',
+              bgcolor: 'common.white',
+              '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+            }}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            disabled={bulkDeleteDialog.deleting}
+            onClick={confirmBulkDelete}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 1.5,
+              bgcolor: '#ef4444',
+              fontWeight: 900,
+              px: 2.5,
+              '&:hover': { bgcolor: '#dc2626' },
+            }}
+          >
+            {bulkDeleteDialog.deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={sellDialog.open}
+        onClose={() => (sellDialog.selling ? null : setSellDialog({ open: false, selling: false, row: null, phone: '', name: '', notes: '' }))}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 20px 60px rgba(2, 6, 23, 0.25)',
+          },
+        }}
+      >
+        <DialogContent sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
+            <Typography sx={{ fontWeight: 900, fontSize: 18, color: '#0f172a' }}>
+              Sell Voucher Directly
+            </Typography>
+            <Button
+              variant="text"
+              disabled={sellDialog.selling}
+              onClick={() => setSellDialog({ open: false, selling: false, row: null, phone: '', name: '', notes: '' })}
+              sx={{ minWidth: 36, px: 1, color: '#64748b', fontWeight: 900, textTransform: 'none' }}
+            >
+              ×
+            </Button>
+          </Box>
+
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              border: '1px solid #bae6fd',
+              bgcolor: '#e0f2fe',
+              p: 2,
+              mb: 2,
+            }}
+          >
+            <Typography sx={{ fontWeight: 900, color: '#0f172a', fontSize: 13 }}>
+              Direct Sale:
+              <Typography component="span" sx={{ fontWeight: 700, color: '#0f172a', fontSize: 13 }}>
+                {' '}This voucher will be marked as used and an SMS will be sent to the customer with the voucher details.
+              </Typography>
+            </Typography>
+          </Paper>
+
+          <Typography sx={{ fontWeight: 900, mb: 1 }}>Voucher Details:</Typography>
+
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              border: '1px solid #e5e7eb',
+              bgcolor: '#f8fafc',
+              p: 2,
+              mb: 2,
+            }}
+          >
+            <Typography sx={{ fontWeight: 900, color: '#0f172a', fontSize: 13 }}>
+              Code: <span style={{ color: '#2563eb' }}>{String(sellDialog.row?.code ?? '')}</span>
+            </Typography>
+            <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: 13, mt: 0.5 }}>
+              Bundle: {String(sellDialog.row?.package_name ?? selectedPackage?.name ?? '')}
+            </Typography>
+            <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: 13, mt: 0.5 }}>
+              Price: UGX {Number(selectedPackageMeta?.price_ugx ?? selectedPackageMeta?.price ?? 0).toLocaleString()}
+            </Typography>
+          </Paper>
+
+          <TextField
+            fullWidth
+            required
+            label="Customer Phone Number"
+            placeholder="e.g., 0701234567"
+            value={sellDialog.phone}
+            onChange={(e) => setSellDialog((s) => ({ ...s, phone: e.target.value }))}
+            sx={{ mb: 1.5 }}
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: -1, mb: 2 }}>
+            The voucher code will be sent to this number via SMS
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Customer Name (optional)"
+            placeholder="Customer's name"
+            value={sellDialog.name}
+            onChange={(e) => setSellDialog((s) => ({ ...s, name: e.target.value }))}
+            sx={{ mb: 2 }}
+          />
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Notes (optional)"
+            placeholder="Any additional notes about this sale"
+            value={sellDialog.notes}
+            onChange={(e) => setSellDialog((s) => ({ ...s, notes: e.target.value }))}
+            sx={{ mb: 2 }}
+          />
+
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              border: '1px solid #fde68a',
+              bgcolor: '#fef3c7',
+              p: 2,
+            }}
+          >
+            <Typography sx={{ color: '#92400e', fontSize: 13, fontWeight: 700 }}>
+              Payment Method: <span style={{ fontWeight: 700 }}>Cash only.</span> This transaction will be recorded as a completed cash sale.
+            </Typography>
+          </Paper>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button
+            variant="outlined"
+            disabled={sellDialog.selling}
+            onClick={() => setSellDialog({ open: false, selling: false, row: null, phone: '', name: '', notes: '' })}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 1.5,
+              borderColor: '#cbd5e1',
+              color: '#0f172a',
+              bgcolor: 'common.white',
+              '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+            }}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            disabled={sellDialog.selling}
+            onClick={confirmSellVoucher}
+            startIcon={<Icon path={ICONS.eye} size={16} color="#fff" />}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 1.5,
+              bgcolor: '#16a34a',
+              fontWeight: 900,
+              px: 2.5,
+              '&:hover': { bgcolor: '#15803d' },
+            }}
+          >
+            {sellDialog.selling ? 'Selling…' : 'Sell Voucher & Send SMS'}
           </Button>
         </DialogActions>
       </Dialog>

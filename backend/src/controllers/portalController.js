@@ -31,10 +31,30 @@ function normalizePaymentProviderParam(value) {
 }
 
 function isDeterministicPaymentSuccess({ phone, bundleId, provider }) {
-	const input = `${String(phone ?? '').trim()}|${String(bundleId ?? '').trim()}|${String(provider ?? '').trim()}`;
-	const digest = crypto.createHash('sha256').update(input).digest();
-	// Deterministic ~90% success rate.
-	return digest[0] < 230;
+	// NOTE: This is only used in mock mode.
+	// Previously this was fully deterministic per (phone,bundle,provider), which caused some
+	// bundles to *always* fail for certain users even after retries.
+	//
+	// New behavior:
+	// - By default, mock payments always succeed.
+	// - You can simulate failures by setting MT_MOCK_PAYMENT_FAIL_RATE (0..1).
+	// - Optionally force deterministic mode with MT_MOCK_PAYMENT_DETERMINISTIC=1.
+	const deterministic = String(env.MT_MOCK_PAYMENT_DETERMINISTIC ?? '') === '1';
+	if (deterministic) {
+		const input = `${String(phone ?? '').trim()}|${String(bundleId ?? '').trim()}|${String(provider ?? '').trim()}`;
+		const digest = crypto.createHash('sha256').update(input).digest();
+		// Deterministic ~90% success rate.
+		return digest[0] < 230;
+	}
+
+	const failRateRaw = Number(env.MT_MOCK_PAYMENT_FAIL_RATE ?? 0);
+	const failRate = Number.isFinite(failRateRaw) ? Math.min(1, Math.max(0, failRateRaw)) : 0;
+	if (failRate <= 0) return true;
+	if (failRate >= 1) return false;
+
+	// Use crypto for stable randomness across node versions.
+	const roll = crypto.randomBytes(1)[0] / 255;
+	return roll >= failRate;
 }
 
 async function hasPublicTableColumn({ table, column }) {

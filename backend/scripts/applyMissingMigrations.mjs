@@ -143,8 +143,23 @@ async function main() {
     if (!bundleIsNullable || !allowsSuccess) {
       await applySqlFile('../sql/migrations/20260202_001_transactions_voucher_attempts.sql');
     }
+
+    // Admin direct sale audit fields
+    const needsTxSource = !(await columnExists('transactions', 'source'));
+    const needsTxVoucherId = !(await columnExists('transactions', 'voucher_id'));
+    if (needsTxSource || needsTxVoucherId) {
+      await applySqlFile('../sql/migrations/20260203_004_add_transactions_source_and_voucher_id.sql');
+    }
   } else {
     console.warn("Table 'transactions' not found. Skipping transactions migrations.");
+  }
+
+  // 4b) vouchers: add used_by for direct sale attribution
+  if (await tableExists('vouchers')) {
+    const needsUsedBy = !(await columnExists('vouchers', 'used_by'));
+    if (needsUsedBy) {
+      await applySqlFile('../sql/migrations/20260203_003_add_vouchers_used_by.sql');
+    }
   }
 
   // 5) packages: full bundle fields (description + updated_at)

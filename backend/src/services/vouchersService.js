@@ -56,6 +56,60 @@ function uniquePositiveIntArray(ids) {
   return out;
 }
 
+function isUniqueViolation(err) {
+  return err && (err.code === '23505' || err.code === 23505);
+}
+
+async function hasPublicTableColumn(client, { table, column }) {
+  const t = String(table ?? '').trim();
+  const c = String(column ?? '').trim();
+  if (!t || !c) return false;
+  const res = await client.query(
+    `
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = $1
+      AND column_name = $2
+    LIMIT 1
+    `,
+    [t, c]
+  );
+  return Boolean(res.rows?.[0]);
+}
+
+function generateReference() {
+  const ts = Date.now();
+  const rnd = Math.random().toString(16).slice(2, 8).toUpperCase();
+  return `TXN-${ts}-${rnd}`;
+}
+
+function normalizeUgPhoneOrThrow(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    throw new DomainError('BAD_REQUEST', 'phone_number is required', 400);
+  }
+
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) {
+    throw new DomainError('BAD_REQUEST', 'phone_number is invalid', 400);
+  }
+
+  if (digits.startsWith('256') && digits.length === 12 && digits[3] === '7') {
+    return `+${digits}`;
+  }
+
+  if (digits.startsWith('0') && digits.length === 10 && digits[1] === '7') {
+    return `+256${digits.slice(1)}`;
+  }
+
+  if (digits.length === 9 && digits[0] === '7') {
+    return `+256${digits}`;
+  }
+
+  throw new DomainError('BAD_REQUEST', 'phone_number must be a valid UG phone number', 400);
+}
+
 const EFFECTIVE_STATUS_SQL = `
   CASE
     WHEN v.status = 'available'::voucher_status
@@ -66,8 +120,18 @@ const EFFECTIVE_STATUS_SQL = `
   END
 `;
 
+let hasVouchersUsedByColumnCache = null;
+
+async function vouchersHasUsedByColumn(client) {
+  if (hasVouchersUsedByColumnCache != null) return hasVouchersUsedByColumnCache;
+  const ok = await hasPublicTableColumn(client, { table: 'vouchers', column: 'used_by' });
+  hasVouchersUsedByColumnCache = ok;
+  return ok;
+}
+
 export class VouchersService {
   static async listVouchers({ status, packageId, batchId } = {}) {
+    const client = await pool.connect();
     const conditions = [];
     const params = [];
 
@@ -95,25 +159,228 @@ export class VouchersService {
 
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const result = await query(
-      `
-      SELECT
-        v.id::int AS id,
-        v.code,
-        ${EFFECTIVE_STATUS_SQL} AS status,
-        p.name AS package_name,
-        v.batch_id,
-        v.created_at,
-        v.used_at
-      FROM vouchers v
-      JOIN packages p ON p.id = v.package_id
-      ${whereSql}
-      ORDER BY v.created_at DESC
-      `,
-      params
-    );
+    try {
+      const includeUsedBy = await vouchersHasUsedByColumn(client);
+      const usedBySelect = includeUsedBy ? ', v.used_by' : '';
 
-    return result.rows;
+      const result = await client.query(
+        `
+        SELECT
+          v.id::int AS id,
+          v.code,
+          ${EFFECTIVE_STATUS_SQL} AS status,
+          p.name AS package_name,
+          p.price_ugx,
+          v.batch_id,
+          v.created_at,
+          v.used_at
+          ${usedBySelect}
+        FROM vouchers v
+        JOIN packages p ON p.id = v.package_id
+        ${whereSql}
+        ORDER BY v.created_at DESC
+        `,
+        params
+      );
+
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  static async sellVoucherDirectlyById({ id, phone_number, customer_name, notes } = {}) {
+    void customer_name;
+    void notes;
+
+    const voucherId = parsePositiveId(id, 'id');
+    if (!voucherId) {
+      throw new DomainError('BAD_REQUEST', 'id must be a valid number', 400);
+    }
+
+    const normalizedPhone = normalizeUgPhoneOrThrow(phone_number);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const includeUsedBy = await vouchersHasUsedByColumn(client);
+
+      const voucherRes = await client.query(
+        `
+        SELECT
+          v.id,
+          v.code,
+          v.status,
+          v.expires_at,
+          (v.expires_at IS NOT NULL AND v.expires_at < NOW()) AS is_expired,
+          v.package_id,
+          p.name AS package_name,
+          p.price_ugx
+        FROM vouchers v
+        JOIN packages p ON p.id = v.package_id
+        WHERE v.id = $1
+        FOR UPDATE
+        `,
+        [voucherId]
+      );
+
+      const voucher = voucherRes.rows?.[0] ?? null;
+      if (!voucher) {
+        throw new DomainError('VOUCHER_NOT_FOUND', 'Voucher not found', 404);
+      }
+
+      if (voucher.status === 'used') {
+        throw new DomainError('VOUCHER_ALREADY_USED', 'Voucher already used', 409);
+      }
+
+      if (voucher.status === 'expired' || voucher.is_expired) {
+        throw new DomainError('VOUCHER_EXPIRED', 'Voucher is expired', 409);
+      }
+
+      const updateParams = [voucherId];
+      const setClauses = ["status = 'used'::voucher_status", 'used_at = NOW()'];
+      if (includeUsedBy) {
+        updateParams.push(normalizedPhone);
+        setClauses.push(`used_by = $${updateParams.length}`);
+      }
+
+      const updateRes = await client.query(
+        `
+        UPDATE vouchers
+        SET ${setClauses.join(', ')}
+        WHERE id = $1
+          AND status = 'available'::voucher_status
+          AND (expires_at IS NULL OR expires_at >= NOW())
+        RETURNING id, code, status, used_at${includeUsedBy ? ', used_by' : ''}
+        `,
+        updateParams
+      );
+
+      if (updateRes.rowCount !== 1) {
+        throw new DomainError('VOUCHER_EXPIRED', 'Voucher cannot be sold', 409);
+      }
+
+      const updatedVoucher = updateRes.rows?.[0] ?? null;
+
+      // Insert a cash transaction (best-effort schema compatibility).
+      const hasPaymentProvider = await hasPublicTableColumn(client, { table: 'transactions', column: 'payment_provider' });
+      const hasPaidAt = await hasPublicTableColumn(client, { table: 'transactions', column: 'paid_at' });
+      const hasSource = await hasPublicTableColumn(client, { table: 'transactions', column: 'source' });
+      const hasVoucherIdCol = await hasPublicTableColumn(client, { table: 'transactions', column: 'voucher_id' });
+
+      const amountUgx = Number(voucher.price_ugx ?? 0);
+      if (!Number.isFinite(amountUgx) || amountUgx <= 0) {
+        throw new DomainError('BAD_REQUEST', 'Voucher price is missing for this bundle', 400);
+      }
+
+      const columns = [
+        'reference',
+        'voucher_code',
+        'bundle_id',
+        'customer_phone',
+        'amount_ugx',
+        'commission_ugx',
+        'status',
+        'payment_method',
+        hasPaymentProvider ? 'payment_provider' : null,
+        hasPaidAt ? 'paid_at' : null,
+        hasSource ? 'source' : null,
+        hasVoucherIdCol ? 'voucher_id' : null,
+      ].filter(Boolean);
+
+      // reference
+      let reference = generateReference();
+      // voucher_code
+      // bundle_id
+      // customer_phone
+      // amount_ugx
+      // commission_ugx
+      // status
+      // payment_method
+      // payment_provider?
+      // paid_at?
+      // source?
+      // voucher_id?
+
+      async function tryInsertTx() {
+        const txParams = [];
+        const renderedValues = [];
+        for (let i = 0; i < columns.length; i += 1) {
+          const col = columns[i];
+          if (col === 'paid_at') {
+            renderedValues.push('NOW()');
+            continue;
+          }
+
+          let param = null;
+          if (col === 'reference') param = reference;
+          else if (col === 'voucher_code') param = String(voucher.code);
+          else if (col === 'bundle_id') param = Number(voucher.package_id);
+          else if (col === 'customer_phone') param = normalizedPhone;
+          else if (col === 'amount_ugx') param = amountUgx;
+          else if (col === 'commission_ugx') param = 0;
+          else if (col === 'status') param = 'success';
+          else if (col === 'payment_method') param = 'cash';
+          else if (col === 'payment_provider') param = 'NONE';
+          else if (col === 'source') param = 'admin_direct_sale';
+          else if (col === 'voucher_id') param = Number(voucher.id);
+
+          txParams.push(param);
+          renderedValues.push(`$${txParams.length}`);
+        }
+
+        const finalSql = `
+          INSERT INTO transactions (${columns.join(', ')})
+          VALUES (${renderedValues.join(', ')})
+          RETURNING id, reference
+        `;
+
+        const txRes = await client.query(finalSql, txParams);
+        return txRes.rows?.[0] ?? null;
+      }
+
+      let txRow = null;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          txRow = await tryInsertTx();
+          break;
+        } catch (err) {
+          if (isUniqueViolation(err)) {
+            reference = generateReference();
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!txRow) {
+        throw new DomainError('REFERENCE_COLLISION', 'Failed to generate unique transaction reference', 500);
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        voucher: {
+          id: Number(updatedVoucher.id),
+          code: String(updatedVoucher.code),
+          status: String(updatedVoucher.status),
+          used_at: updatedVoucher.used_at,
+          used_by: includeUsedBy ? updatedVoucher.used_by : normalizedPhone,
+          package_name: String(voucher.package_name),
+          price_ugx: voucher.price_ugx == null ? null : Number(voucher.price_ugx),
+        },
+        transaction: {
+          id: Number(txRow.id),
+          reference: String(txRow.reference),
+        },
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   static async redeemVoucher(code) {
