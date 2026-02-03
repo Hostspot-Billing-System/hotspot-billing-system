@@ -149,6 +149,25 @@ async function main() {
 
   // 5) packages: full bundle fields (description + updated_at)
   if (await tableExists('packages')) {
+    // Phase F requires billing-specific fields on packages for Bundles CRUD.
+    // Some existing DBs may only have the original Phase 1 columns.
+    const needsPriceUgx = !(await columnExists('packages', 'price_ugx'));
+    const needsIsActive = !(await columnExists('packages', 'is_active'));
+    if (needsPriceUgx || needsIsActive) {
+      await applySqlInline(
+        'extend packages: price_ugx + is_active',
+        `
+        BEGIN;
+        ALTER TABLE IF EXISTS packages
+          ADD COLUMN IF NOT EXISTS price_ugx INTEGER NULL;
+
+        ALTER TABLE IF EXISTS packages
+          ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+        COMMIT;
+        `
+      );
+    }
+
     const needsDescription = !(await columnExists('packages', 'description'));
     const needsUpdatedAt = !(await columnExists('packages', 'updated_at'));
     if (needsDescription || needsUpdatedAt) {
