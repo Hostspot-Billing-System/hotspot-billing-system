@@ -11,6 +11,7 @@ import AdminReports from './pages/AdminReports.jsx';
 import AdminClients from './pages/AdminClients.jsx';
 import MikroTikRouters from './pages/MikroTikRouters.jsx';
 import PortalHome from './portal/PortalHome.jsx';
+import MyProfile from './pages/MyProfile.jsx';
 
 function getPath() {
   if (typeof window === 'undefined') return '/';
@@ -70,6 +71,7 @@ export default function App() {
     if (path === '/admin/reports') return <AdminReports />;
     if (path === '/admin/clients') return <AdminClients />;
     if (path === '/admin/mikrotik-routers') return <MikroTikRouters />;
+    if (path === '/admin/my-profile') return <MyProfile />;
 
     // Default to admin dashboard for unknown paths
     if (path?.startsWith('/admin')) return <AdminDashboard />;

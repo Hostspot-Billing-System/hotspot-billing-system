@@ -1,6 +1,7 @@
 import { VoucherUploadService, toHttpError } from '../services/voucherUploadService.js';
 import { VouchersService, toHttpError as toHttpErrorVouchers } from '../services/vouchersService.js';
 import { sendVoucherDirectSaleSms } from '../services/smsService.js';
+import { query } from '../config/db.js';
 
 export async function uploadVouchersCsv(req, res) {
   try {
@@ -130,11 +131,32 @@ export async function sellVoucherDirectly(req, res) {
 
     // SMS is best-effort. Never rollback on failure.
     try {
+      let durationMinutes = null;
+      try {
+        const voucherId = result?.voucher?.id ?? null;
+        if (voucherId != null) {
+          const dRes = await query(
+            `
+            SELECT p.duration_minutes
+            FROM vouchers v
+            JOIN packages p ON p.id = v.package_id
+            WHERE v.id = $1
+            LIMIT 1
+            `,
+            [voucherId]
+          );
+          durationMinutes = dRes.rows?.[0]?.duration_minutes ?? null;
+        }
+      } catch {
+        durationMinutes = null;
+      }
+
       const sms = await sendVoucherDirectSaleSms({
         to: result?.voucher?.used_by ?? phone_number,
         voucherCode: result?.voucher?.code,
         bundleName: result?.voucher?.package_name,
         priceUgx: result?.voucher?.price_ugx,
+        durationMinutes,
       });
       if (!sms?.ok) {
         console.warn('[sms] direct sale sms failed:', sms?.error ?? 'unknown');

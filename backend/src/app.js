@@ -18,6 +18,8 @@ import mikrotikRoutes from "./routes/mikrotikRoutes.js";
 import reportsRoutes from "./routes/reportsRoutes.js";
 import clientsRoutes from "./routes/clientsRoutes.js";
 import routersRoutes from "./routes/routersRoutes.js";
+import smsSettingsRoutes from "./routes/smsSettingsRoutes.js";
+import myProfileRoutes from "./routes/myProfileRoutes.js";
 
 const app = express();
 
@@ -88,6 +90,8 @@ app.use("/api/withdrawals", withdrawalsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/routers", routersRoutes);
+app.use("/api/sms-settings", smsSettingsRoutes);
+app.use("/api/my-profile", myProfileRoutes);
 
 /* =========================
    ADMIN & MIKROTIK

@@ -197,6 +197,20 @@ async function main() {
     console.warn("Table 'packages' not found. Skipping packages migrations.");
   }
 
+  // 6) SMS: settings + logs tables (required for UG-SMS integration + auditing)
+  if (!(await tableExists('sms_settings'))) {
+    await applySqlFile('../sql/migrations/20260204_002_create_sms_settings.sql');
+  }
+
+  if (!(await tableExists('sms_logs'))) {
+    await applySqlFile('../sql/migrations/20260204_003_create_sms_logs.sql');
+  }
+
+  // 7) Owner profile (My Profile page)
+  if (!(await tableExists('owner_profile'))) {
+    await applySqlFile('../sql/migrations/20260204_004_create_owner_profile.sql');
+  }
+
   console.log('Missing migrations check: done');
 }
 

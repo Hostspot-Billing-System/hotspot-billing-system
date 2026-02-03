@@ -6,7 +6,7 @@ export const ADMIN_SIDEBAR_MENU = [
   { key: 'withdraw', label: 'Withdraw', icon: 'wallet', path: '/admin/withdraw' },
   { key: 'reports', label: 'Reports', icon: 'chart', path: '/admin/reports' },
   { key: 'clients', label: 'Clients', icon: 'users', path: '/admin/clients' },
-  { key: 'agents', label: 'Agents', icon: 'userPlus', path: '/admin/agents' },
+  { key: 'agents', label: 'Agents', icon: 'userPlus', locked: true, path: '/admin/agents' },
   {
     key: 'mikrotikRouters',
     label: 'MikroTik Routers',

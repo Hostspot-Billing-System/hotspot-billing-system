@@ -16,6 +16,7 @@ import { toHttpError as toMikroTikRuntimeHttpError } from '../services/mikrotikR
 import { MobileMoneyService, toHttpError as toMobileMoneyHttpError } from '../services/mobileMoneyService.js';
 import { env } from '../config/env.js';
 import { mockRuntimeService } from '../services/MockRuntimeService.js';
+import { sendSMS } from '../services/smsService.js';
 
 function isMockMode() {
 	const mode = String(env.MT_MODE ?? 'real').toLowerCase();
@@ -1242,6 +1243,44 @@ export async function postPortalPaymentCallbackHandler(req, res) {
 		});
 
 		await client.query('COMMIT');
+
+		// SMS is best-effort and must never affect payment success.
+		try {
+			// Enrich with bundle name for better customer message.
+			let bundleName = null;
+			try {
+				const bRes = await query('SELECT name FROM packages WHERE id = $1 LIMIT 1', [tx.bundle_id]);
+				bundleName = bRes.rows?.[0]?.name ?? null;
+			} catch {
+				bundleName = null;
+			}
+
+			const accessCode = String(portalSession.mac_address ?? '')
+				.trim()
+				.toUpperCase()
+				.replace(/[^0-9A-F]/g, '');
+			const portalLink = String(process.env.PORTAL_LOGIN_URL ?? process.env.PUBLIC_PORTAL_URL ?? '/portal').trim();
+
+			const messageLines = [
+				'Payment received. Your WiFi access is now active.',
+				bundleName ? `Bundle: ${bundleName}` : null,
+				bundle?.duration_minutes ? `Duration: ${Number(bundle.duration_minutes)} minutes` : null,
+				accessCode ? `Access Code: ${accessCode}` : null,
+				portalLink ? `Portal: ${portalLink}` : null,
+			].filter(Boolean);
+
+			const sms = await sendSMS({
+				to: tx.customer_phone,
+				message: messageLines.join('\n'),
+				purpose: 'mobile_money_success',
+			});
+			if (!sms?.ok) {
+				console.warn('[sms] mobile money success sms failed:', sms?.error ?? 'unknown');
+			}
+		} catch (err) {
+			console.warn('[sms] mobile money success sms exception:', err?.message ?? err);
+		}
+
 		console.log('[PortalCallback] completed + activated', { reference });
 		return res.status(200).json({ success: true, data: { reference, status: 'completed' } });
 	} catch (err) {
