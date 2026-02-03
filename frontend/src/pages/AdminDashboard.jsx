@@ -329,7 +329,7 @@ export default function AdminDashboard() {
                   <Stack spacing={1} sx={{ height: '100%' }}>
                     <Typography
                       variant="subtitle2"
-                      fontWeight={800}
+                      fontWeight={500}
                       sx={{
                         color: 'rgba(255,255,255,0.95)',
                         letterSpacing: 0.2,
@@ -355,7 +355,13 @@ export default function AdminDashboard() {
                               d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 14-4-4 1.41-1.41L11 13.17l5.59-5.58L18 9l-7 7Z"
                             />
                           </SvgIcon>
-                          <Typography variant="h6" fontWeight={900}>
+                          <Typography
+                            variant="h6"
+                            sx={(theme) => ({
+                              fontWeight: 400,
+                              fontSize: `calc(${theme.typography.h6.fontSize} * 0.84)`,
+                            })}
+                          >
                             {loading ? (
                               <Skeleton variant="text" sx={{ bgcolor: 'rgba(255,255,255,0.35)' }} width="65%" />
                             ) : (
@@ -367,7 +373,13 @@ export default function AdminDashboard() {
                       </Stack>
                     ) : (
                       <>
-                        <Typography variant="h4" fontWeight={800}>
+                        <Typography
+                          variant="h4"
+                          sx={(theme) => ({
+                            fontWeight: 400,
+                            fontSize: `calc(${theme.typography.h4.fontSize} * 0.84)`,
+                          })}
+                        >
                           <StatCardValue loading={loading} value={v?.value} />
                         </Typography>
                         <Box sx={{ flexGrow: 1 }} />

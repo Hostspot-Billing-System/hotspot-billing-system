@@ -58,13 +58,19 @@ function StatCard({ title, value, subtitle, color }) {
     >
       <CardContent>
         <Stack spacing={1}>
-          <Typography variant="subtitle2" fontWeight={800} sx={{ opacity: 0.95 }}>
+          <Typography variant="subtitle2" fontWeight={500} sx={{ opacity: 0.95 }}>
             {title}
           </Typography>
           <Typography variant="caption" sx={{ opacity: 0.9, fontWeight: 800 }}>
             UGX
           </Typography>
-          <Typography variant="h4" fontWeight={900}>
+          <Typography
+            variant="h4"
+            sx={(theme) => ({
+              fontWeight: 400,
+              fontSize: `calc(${theme.typography.h4.fontSize} * 0.84)`,
+            })}
+          >
             {value}
           </Typography>
           {subtitle ? (
