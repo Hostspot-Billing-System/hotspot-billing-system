@@ -65,7 +65,9 @@ async function fetchVoucherCountsForPackage(packageId, { signal } = {}) {
 
 export default function AdminBundles() {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // Always use card layout to avoid table clipping/hidden actions on mid-size laptops.
+  // (The right panel is narrower due to the admin sidebar and left form column.)
+  const useCardLayout = true;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -294,7 +296,7 @@ export default function AdminBundles() {
             }}
           >
             <Stack
-              direction={{ xs: 'column', md: 'row' }}
+              direction={{ xs: 'column', xl: 'row' }}
               spacing={1.25}
               alignItems={{ xs: 'stretch', md: 'center' }}
             >
@@ -330,7 +332,7 @@ export default function AdminBundles() {
                 </FormControl>
               </Box>
 
-              <Stack direction="row" spacing={1} sx={{ pt: { xs: 0.5, md: 2.3 } }}>
+              <Stack direction="row" spacing={1} sx={{ pt: { xs: 0.5, xl: 2.3 } }}>
                 <Button
                   variant="contained"
                   onClick={() => setFilters({ q: draftSearch, status: draftStatus })}
@@ -365,17 +367,23 @@ export default function AdminBundles() {
 
           <Divider sx={{ mb: 1.5 }} />
 
-          {isMobile ? (
-            <Stack spacing={1.25}>
+          {useCardLayout ? (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+                gap: 1.25,
+              }}
+            >
               {loading ? (
-                <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', p: 2 }}>
+                <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', p: 2, gridColumn: '1 / -1' }}>
                   <Stack direction="row" spacing={1.5} alignItems="center">
                     <CircularProgress size={18} />
                     <Typography variant="body2">Loading…</Typography>
                   </Stack>
                 </Paper>
               ) : filteredRows.length === 0 ? (
-                <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', p: 2 }}>
+                <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', p: 2, gridColumn: '1 / -1' }}>
                   <Typography variant="body2" color="text.secondary">
                     No bundles found.
                   </Typography>
@@ -427,7 +435,7 @@ export default function AdminBundles() {
                           />
                         </Stack>
 
-                        <Stack direction="row" spacing={1} sx={{ pt: 0.25 }}>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ pt: 0.25 }}>
                           <Button
                             fullWidth
                             variant="outlined"
@@ -486,159 +494,8 @@ export default function AdminBundles() {
                   );
                 })
               )}
-            </Stack>
-          ) : (
-            <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <Table size="small" sx={{ minWidth: 900 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 900, width: 80 }}>
-                      #
-                      <br />
-                      ID
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>Name</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>Duration</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>Price</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>
-                      Vouchers
-                      <Typography
-                        component="span"
-                        variant="caption"
-                        sx={{ display: 'block', color: 'text.secondary', fontWeight: 700 }}
-                      >
-                        (Available/Total)
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={7}>
-                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ py: 2 }}>
-                          <CircularProgress size={18} />
-                          <Typography variant="body2">Loading…</Typography>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7}>
-                        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                          No bundles found.
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredRows.map((r) => {
-                      const isActive = Boolean(r?.is_active ?? true);
-                      const counts = voucherCounts?.[r.id] ?? null;
-                      const vouchersLabel = counts ? `${counts.available} / ${counts.total}` : '— / —';
-                      return (
-                        <TableRow key={r.id} hover>
-                          <TableCell sx={{ fontWeight: 800 }}>{r.id}</TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 900 }}>
-                              {r.name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {r.mikrotik_profile ?? '—'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={formatDurationBadge(r.duration_minutes)}
-                              size="small"
-                              sx={{ bgcolor: '#06b6d4', color: 'white', fontWeight: 900 }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: 900 }}>{formatUGX(r.price_ugx)}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={vouchersLabel}
-                              size="small"
-                              sx={{ bgcolor: '#2563eb', color: 'white', fontWeight: 900 }}
-                            />
-                            {countsLoading && !counts ? (
-                              <Typography
-                                variant="caption"
-                                sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}
-                              >
-                                Updating…
-                              </Typography>
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={isActive ? 'Active' : 'Disabled'}
-                              size="small"
-                              sx={{
-                                bgcolor: isActive ? '#16a34a' : '#64748b',
-                                color: 'white',
-                                fontWeight: 900,
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={1}>
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
-                                onClick={() =>
-                                  setSnack({
-                                    open: true,
-                                    message: 'Edit bundle is not available yet (backend endpoint not implemented).',
-                                    severity: 'info',
-                                  })
-                                }
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                color="primary"
-                                sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
-                                onClick={() =>
-                                  setSnack({
-                                    open: true,
-                                    message:
-                                      'Enable/Disable bundle is not available yet (backend endpoint not implemented).',
-                                    severity: 'info',
-                                  })
-                                }
-                              >
-                                {isActive ? 'Disable' : 'Enable'}
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                color="error"
-                                sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
-                                onClick={() =>
-                                  setSnack({
-                                    open: true,
-                                    message: 'Delete bundle is not available yet (backend endpoint not implemented).',
-                                    severity: 'info',
-                                  })
-                                }
-                              >
-                                Delete
-                              </Button>
-                            </Stack>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+            </Box>
+          ) : null}
         </Paper>
       </Box>
 
