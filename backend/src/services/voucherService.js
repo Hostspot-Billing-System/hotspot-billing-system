@@ -1,4 +1,6 @@
 import { pool } from '../config/db.js';
+import { provisionVoucherOnMikroTik, MikroTikProvisioningError } from './mikrotikProvisioningService.js';
+import { MikroTikClientError } from '../integrations/mikrotik/mikrotikClient.js';
 
 class DomainError extends Error {
   constructor(code, message, httpStatus) {
@@ -63,16 +65,106 @@ export class VoucherService {
     }
 
     if (voucherRow.status !== 'available') {
-      throw new DomainError(
-        'VOUCHER_NOT_AVAILABLE',
-        `Voucher is not available (status: ${voucherRow.status})`,
-        409
-      );
+      if (voucherRow.status === 'used') {
+        throw new DomainError('VOUCHER_USED', 'Voucher already used', 409);
+      }
+      if (voucherRow.status === 'expired') {
+        throw new DomainError('VOUCHER_EXPIRED', 'Voucher is expired', 410);
+      }
+      throw new DomainError('VOUCHER_NOT_AVAILABLE', `Voucher is not available (status: ${voucherRow.status})`, 409);
     }
 
     if (isExpired(voucherRow)) {
       throw new DomainError('VOUCHER_EXPIRED', 'Voucher is expired', 410);
     }
+  }
+
+  static async redeemVoucherForSessionTransactional(
+    client,
+    { voucher_code, mac_address, ip_address },
+    { skipMikrotikProvisioning } = {}
+  ) {
+    const code = normalizeVoucherCode(voucher_code);
+    const macAddress = normalizeMacAddress(mac_address);
+    const ipAddress = normalizeIpAddress(ip_address);
+
+    if (!code) {
+      throw new DomainError('BAD_REQUEST', 'voucher_code is required', 400);
+    }
+
+    if (!macAddress) {
+      throw new DomainError('BAD_REQUEST', 'mac_address is required', 400);
+    }
+
+    // Lock the voucher row to prevent concurrent reuse.
+    const voucherResult = await client.query(
+      `
+        SELECT
+          v.id,
+          v.code,
+          v.status,
+          v.expires_at,
+          v.used_at,
+          v.created_at,
+          v.package_id,
+          p.name AS package_name,
+          p.duration_minutes,
+          p.mikrotik_profile
+        FROM vouchers v
+        JOIN packages p ON p.id = v.package_id
+        WHERE v.code = $1
+        FOR UPDATE
+        `,
+      [code]
+    );
+
+    const voucher = voucherResult.rows[0] ?? null;
+    this.validateVoucherForLogin(voucher);
+
+    // Re-check expiry inside the transaction using DB time.
+    if (voucher.expires_at) {
+      const expiryCheck = await client.query('SELECT NOW() >= $1::timestamptz AS expired', [
+        voucher.expires_at,
+      ]);
+      if (expiryCheck.rows[0]?.expired) {
+        throw new DomainError('VOUCHER_EXPIRED', 'Voucher is expired', 410);
+      }
+    }
+
+    const updatedVoucher = await this.markVoucherAsUsedTransactional(client, voucher.id);
+    const session = await this.createHotspotSessionTransactional(client, {
+      voucherId: voucher.id,
+      macAddress,
+      ipAddress,
+    });
+
+    if (!skipMikrotikProvisioning) {
+      // Phase F: MikroTik is the source of truth for access.
+      // If MikroTik provisioning fails, the caller should rollback.
+      await provisionVoucherOnMikroTik({
+        voucherCode: voucher.code,
+        bundleId: voucher.package_id,
+        durationMinutes: voucher.duration_minutes,
+        profileName: `hotspot_${voucher.package_id}`,
+      });
+    }
+
+    return {
+      voucher: {
+        id: voucher.id,
+        code: voucher.code,
+        status: updatedVoucher.status,
+        used_at: updatedVoucher.used_at,
+        expires_at: voucher.expires_at,
+        package: {
+          id: voucher.package_id,
+          name: voucher.package_name,
+          duration_minutes: voucher.duration_minutes,
+          mikrotik_profile: voucher.mikrotik_profile,
+        },
+      },
+      session,
+    };
   }
 
   static async markVoucherAsUsedTransactional(client, voucherId) {
@@ -124,66 +216,15 @@ export class VoucherService {
     try {
       await client.query('BEGIN');
 
-      // Lock the voucher row to prevent concurrent reuse.
-      const voucherResult = await client.query(
-        `
-        SELECT
-          v.id,
-          v.code,
-          v.status,
-          v.expires_at,
-          v.used_at,
-          v.created_at,
-          v.package_id,
-          p.name AS package_name,
-          p.duration_minutes,
-          p.mikrotik_profile
-        FROM vouchers v
-        JOIN packages p ON p.id = v.package_id
-        WHERE v.code = $1
-        FOR UPDATE
-        `,
-        [code]
-      );
-
-      const voucher = voucherResult.rows[0] ?? null;
-      this.validateVoucherForLogin(voucher);
-
-      // Re-check expiry inside the transaction using DB time.
-      if (voucher.expires_at) {
-        const expiryCheck = await client.query('SELECT NOW() >= $1::timestamptz AS expired', [
-          voucher.expires_at,
-        ]);
-        if (expiryCheck.rows[0]?.expired) {
-          throw new DomainError('VOUCHER_EXPIRED', 'Voucher is expired', 410);
-        }
-      }
-
-      const updatedVoucher = await this.markVoucherAsUsedTransactional(client, voucher.id);
-      const session = await this.createHotspotSessionTransactional(client, {
-        voucherId: voucher.id,
-        macAddress,
-        ipAddress,
+      const result = await this.redeemVoucherForSessionTransactional(client, {
+        voucher_code: code,
+        mac_address: macAddress,
+        ip_address: ipAddress,
       });
 
       await client.query('COMMIT');
 
-      return {
-        voucher: {
-          id: voucher.id,
-          code: voucher.code,
-          status: updatedVoucher.status,
-          used_at: updatedVoucher.used_at,
-          expires_at: voucher.expires_at,
-          package: {
-            id: voucher.package_id,
-            name: voucher.package_name,
-            duration_minutes: voucher.duration_minutes,
-            mikrotik_profile: voucher.mikrotik_profile,
-          },
-        },
-        session,
-      };
+      return result;
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -200,6 +241,16 @@ export function toHttpError(err) {
       body: {
         success: false,
         error: { code: err.code, message: err.message },
+      },
+    };
+  }
+
+  if (err instanceof MikroTikClientError || err instanceof MikroTikProvisioningError) {
+    return {
+      httpStatus: err.httpStatus ?? 502,
+      body: {
+        success: false,
+        error: { code: err.code ?? 'MIKROTIK_ERROR', message: err.message ?? 'MikroTik error' },
       },
     };
   }

@@ -8,3 +8,8 @@ frontend/.env
 
 # builds
 frontend/dist
+
+# local DB dump/backup artifacts
+backend/scripts/*.dump
+backend/scripts/*.backup
+hotspot_backup*.sql

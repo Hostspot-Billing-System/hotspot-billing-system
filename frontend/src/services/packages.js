@@ -1,7 +1,9 @@
-import { api } from './api';
+import { api } from "./api";
 
-export async function fetchPackages() {
-  const response = await api.get('/packages');
-  // Expected backend shape: { success: true, packages: [...] }
-  return response.data;
-}
+export const getPackages = () => {
+  return api.get("/api/packages");
+};
+
+export const getPackagesFull = () => {
+  return api.get("/api/packages/full");
+};

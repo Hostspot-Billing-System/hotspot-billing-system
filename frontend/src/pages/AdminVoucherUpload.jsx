@@ -13,13 +13,16 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { fetchPackages } from '../services/packages';
+import { listBundles } from '../services/bundles';
 import { uploadVouchersCsv } from '../services/vouchers';
 
 function extractBackendError(err) {
   const data = err?.response?.data;
   const code = data?.error?.code ?? 'REQUEST_FAILED';
-  const message = data?.error?.message ?? err?.message ?? 'Request failed';
+  const message =
+    data?.error?.message ??
+    err?.message ??
+    (err?.code ? `Request failed (${err.code})` : 'Request failed');
   return { code, message };
 }
 
@@ -36,28 +39,31 @@ export default function AdminVoucherUpload() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
+  let cancelled = false;
 
-    async function load() {
-      setPackagesLoading(true);
-      setPackagesError(null);
-      try {
-        const data = await fetchPackages();
-        if (cancelled) return;
-        setPackages(Array.isArray(data?.packages) ? data.packages : []);
-      } catch (err) {
-        if (cancelled) return;
-        setPackagesError(extractBackendError(err));
-      } finally {
-        if (!cancelled) setPackagesLoading(false);
-      }
+  async function load() {
+    setPackagesLoading(true);
+    setPackagesError(null);
+    try {
+      const data = await listBundles({ status: 'active' });
+      console.debug('[AdminVoucherUpload] bundles data', data);
+      if (cancelled) return;
+      setPackages(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.debug('[AdminVoucherUpload] bundles error', err);
+      if (cancelled) return;
+      setPackagesError(extractBackendError(err));
+    } finally {
+      if (!cancelled) setPackagesLoading(false);
     }
+  }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  load();
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   const canUpload = useMemo(() => {
     return Boolean(selectedPackageId) && Boolean(file) && !uploading;
@@ -101,8 +107,8 @@ export default function AdminVoucherUpload() {
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 6 }}>
-      <Paper elevation={2} sx={{ p: 3 }}>
+    <Container maxWidth="md" sx={{ py: { xs: 2, sm: 6 } }}>
+      <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, borderRadius: { xs: 2, sm: 3 } }}>
         <Stack spacing={2.5}>
           <Box>
             <Typography variant="h5" fontWeight={700}>
@@ -136,14 +142,15 @@ export default function AdminVoucherUpload() {
             >
               {packages.map((p) => (
                 <MenuItem key={p.id} value={String(p.id)}>
-                  {p.name} ({p.duration_minutes} mins)
+                  {p.name}
+                  {typeof p.duration_minutes === 'number' ? ` (${p.duration_minutes} mins)` : ''}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
-            <Button variant="outlined" component="label">
+            <Button variant="outlined" component="label" sx={{ minHeight: 44, textTransform: 'none', borderRadius: 1 }}>
               Choose CSV
               <input type="file" accept=".csv,text/csv" hidden onChange={onFileChange} />
             </Button>
@@ -158,6 +165,7 @@ export default function AdminVoucherUpload() {
               onClick={onUpload}
               disabled={!canUpload}
               startIcon={uploading ? <CircularProgress size={18} /> : null}
+              sx={{ minHeight: 44, textTransform: 'none', borderRadius: 1, fontWeight: 800 }}
             >
               {uploading ? 'Uploading…' : 'Upload Vouchers'}
             </Button>

@@ -14,54 +14,90 @@ function normalizeCode(value) {
   return String(value ?? '').trim();
 }
 
-function pickCodeFromRow(row) {
-  if (!row || typeof row !== 'object') return '';
-
-  // Prefer explicit "code" header (case-insensitive)
-  for (const key of Object.keys(row)) {
-    if (String(key).trim().toLowerCase() === 'code') {
-      return normalizeCode(row[key]);
-    }
+function getColumn(row, index) {
+  if (!row) return undefined;
+  if (Array.isArray(row)) return row[index];
+  if (typeof row === 'object') {
+    if (row[index] !== undefined) return row[index];
+    const key = String(index);
+    if (row[key] !== undefined) return row[key];
   }
-
-  // Otherwise, take the first non-empty column value
-  for (const key of Object.keys(row)) {
-    const candidate = normalizeCode(row[key]);
-    if (candidate) return candidate;
-  }
-
-  return '';
+  return undefined;
 }
 
-async function parseVoucherCodesFromCsvBuffer(buffer) {
-  if (!buffer || buffer.length === 0) return [];
+function looksLikeMikrotikExportHeader(row) {
+  const a = String(getColumn(row, 0) ?? '').trim().toLowerCase();
+  const b = String(getColumn(row, 1) ?? '').trim().toLowerCase();
+  const c = String(getColumn(row, 2) ?? '').trim().toLowerCase();
+  const d = String(getColumn(row, 3) ?? '').trim().toLowerCase();
+  const e = String(getColumn(row, 4) ?? '').trim().toLowerCase();
+  const f = String(getColumn(row, 5) ?? '').trim().toLowerCase();
+
+  // Common MikroTik exported CSV header
+  return a === 'csv.' && b === 'password' && c === 'profile' && d === 'time limit' && e === 'data limit' && f === 'comment';
+}
+
+async function parseVouchersFromCsvBuffer(buffer) {
+  if (!buffer || buffer.length === 0) {
+    return { codes: [], batchLabel: null };
+  }
 
   const codes = [];
+  let batchLabel = null;
+  let rowIndex = 0;
+
   const stream = Readable.from(buffer);
+  const parser = csvParser({
+    separator: ',',
+    skipLines: 0,
+    strict: false,
+    headers: false,
+  });
 
   await new Promise((resolve, reject) => {
     stream
-      .pipe(csvParser({ separator: ',', skipLines: 0, strict: false }))
+      .pipe(parser)
       .on('data', (row) => {
-        const code = pickCodeFromRow(row);
-        if (code) codes.push(code);
+        try {
+          if (rowIndex === 0 && looksLikeMikrotikExportHeader(row)) {
+            rowIndex += 1;
+            return;
+          }
+
+          // SOURCE OF TRUTH:
+          // Column A (index 0) is the voucher code.
+          const voucherCode = String(getColumn(row, 0) || '').trim();
+          if (!voucherCode) {
+            throw new DomainError(
+              'EMPTY_VOUCHER_CODE',
+              'Empty voucher code in column A',
+              400
+            );
+          }
+
+          // Column E (index 4) is optional batch/campaign label.
+          // Some CSV exporters include an empty "Data Limit" column at E and put the
+          // campaign/comment in column F, so we accept F as a fallback.
+          if (batchLabel == null) {
+            const candidate = getColumn(row, 4);
+            const fallback = getColumn(row, 5);
+            const trimmed = candidate != null ? String(candidate).trim() : '';
+            const trimmedFallback = fallback != null ? String(fallback).trim() : '';
+            if (trimmed) batchLabel = trimmed;
+            else if (trimmedFallback) batchLabel = trimmedFallback;
+          }
+
+          codes.push(voucherCode);
+          rowIndex += 1;
+        } catch (err) {
+          parser.destroy(err);
+        }
       })
       .on('error', reject)
       .on('end', resolve);
   });
 
-  // csv-parser ignores blank lines; but for a plain "one code per line" file,
-  // it might treat it as a single column. If no codes were found, try a fallback.
-  if (codes.length === 0) {
-    const text = buffer.toString('utf8');
-    const fallback = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return fallback;
-  }
-
-  return codes;
+  return { codes, batchLabel };
 }
 
 export class VoucherUploadService {
@@ -75,7 +111,7 @@ export class VoucherUploadService {
       throw new DomainError('BAD_REQUEST', 'CSV file is required', 400);
     }
 
-    const parsedCodes = await parseVoucherCodesFromCsvBuffer(fileBuffer);
+    const { codes: parsedCodes, batchLabel } = await parseVouchersFromCsvBuffer(fileBuffer);
     const normalizedCodes = parsedCodes.map(normalizeCode).filter(Boolean);
 
     if (normalizedCodes.length === 0) {
@@ -101,20 +137,43 @@ export class VoucherUploadService {
     try {
       await client.query('BEGIN');
 
-      // Ensure package exists
-      const pkg = await client.query('SELECT id FROM packages WHERE id = $1', [packageId]);
-      if (pkg.rowCount !== 1) {
-        throw new DomainError('PACKAGE_NOT_FOUND', 'Package not found', 404);
+      const hasIsActiveRes = await client.query(
+        `
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'packages'
+          AND column_name = 'is_active'
+        LIMIT 1
+        `
+      );
+      const hasIsActive = Boolean(hasIsActiveRes.rows?.[0]);
+
+      // Ensure package exists (and is active if supported by schema)
+      if (hasIsActive) {
+        const pkg = await client.query('SELECT id, is_active FROM packages WHERE id = $1', [packageId]);
+        if (pkg.rowCount !== 1) {
+          throw new DomainError('PACKAGE_NOT_FOUND', 'Package not found', 404);
+        }
+        const isActive = Boolean(pkg.rows?.[0]?.is_active);
+        if (!isActive) {
+          throw new DomainError('BUNDLE_DISABLED', 'Bundle is disabled. Enable it to upload vouchers.', 409);
+        }
+      } else {
+        const pkg = await client.query('SELECT id FROM packages WHERE id = $1', [packageId]);
+        if (pkg.rowCount !== 1) {
+          throw new DomainError('PACKAGE_NOT_FOUND', 'Package not found', 404);
+        }
       }
 
       // Create batch record
       const batchResult = await client.query(
         `
-        INSERT INTO voucher_batches (filename, package_id)
-        VALUES ($1, $2)
+        INSERT INTO voucher_batches (filename, package_id, description)
+        VALUES ($1, $2, $3)
         RETURNING id
         `,
-        [filename ?? 'upload.csv', packageId]
+        [filename ?? 'upload.csv', packageId, batchLabel]
       );
       const batchId = batchResult.rows[0].id;
 
