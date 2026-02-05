@@ -284,18 +284,37 @@ export async function sendVoucherDirectSaleSms({ to, voucherCode, bundleName, pr
   const duration = Number(durationMinutes);
   const portalLink = getPortalLoginLink();
 
-  const lines = [
-    `Hotspot Voucher: ${code}`,
-    name ? `Bundle: ${name}` : null,
-    Number.isFinite(duration) && duration > 0 ? `Duration: ${duration} minutes` : null,
-    Number.isFinite(price) && price > 0 ? `Price: UGX ${price.toLocaleString()}` : null,
-    portalLink ? `Login: ${portalLink}` : null,
-  ].filter(Boolean);
+  const expiresAt = Number.isFinite(duration) && duration > 0 ? new Date(Date.now() + duration * 60 * 1000) : null;
+  const expiryReadable = expiresAt
+    ? (() => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        const targetDay = new Date(expiresAt.getFullYear(), expiresAt.getMonth(), expiresAt.getDate());
+        const timeStr = expiresAt.toLocaleTimeString('en-UG', { hour: 'numeric', minute: '2-digit' });
+
+        if (targetDay.getTime() === today.getTime()) return `Today at ${timeStr}`;
+        if (targetDay.getTime() === tomorrow.getTime()) return `Tomorrow at ${timeStr}`;
+
+        const dateStr = expiresAt.toLocaleDateString('en-UG', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `${dateStr} at ${timeStr}`;
+      })()
+    : '';
+
+  const message = `
+Welcome to Omega WiFi
+Code: ${code}
+Plan: ${name}
+Valid until: ${expiryReadable}
+
+Tap to connect:
+${portalLink}
+`.trim();
 
   return sendSMS({
     userId: getDefaultUserId(),
     to,
-    message: lines.join('\n'),
+    message,
     purpose: 'customer_voucher',
   });
 }

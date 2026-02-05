@@ -8,12 +8,50 @@ function resolveSmsProvider() {
 	return raw;
 }
 
+function formatExpiryReadable(expiresAt) {
+	const raw = String(expiresAt ?? '').trim();
+	const d = raw ? new Date(raw) : null;
+	if (!d || Number.isNaN(d.getTime())) return raw;
+
+	const now = new Date();
+	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+	const targetDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+	const timeStr = d.toLocaleTimeString('en-UG', {
+		hour: 'numeric',
+		minute: '2-digit',
+	});
+
+	if (targetDay.getTime() === today.getTime()) {
+		return `Today at ${timeStr}`;
+	}
+	if (targetDay.getTime() === tomorrow.getTime()) {
+		return `Tomorrow at ${timeStr}`;
+	}
+
+	const dateStr = d.toLocaleDateString('en-UG', {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+	});
+	return `${dateStr} at ${timeStr}`;
+}
+
 function formatVoucherMessage({ voucherCode, bundleName, expiresAt }) {
 	const voucher = String(voucherCode ?? '').trim();
 	const bundle = String(bundleName ?? '').trim();
-	const date = String(expiresAt ?? '').trim();
+	const date = formatExpiryReadable(expiresAt);
 
-	return `Your WiFi voucher: ${voucher}\nPackage: ${bundle}\nExpires: ${date}\nThank you.`;
+	return `
+Welcome to Omega WiFi
+Code: ${voucher}
+Plan: ${bundle}
+Valid until: ${date}
+
+Tap to connect:
+${String(process.env.PORTAL_LOGIN_URL ?? process.env.PUBLIC_PORTAL_URL ?? '/portal').trim()}
+`.trim();
 }
 
 export const SmsService = {

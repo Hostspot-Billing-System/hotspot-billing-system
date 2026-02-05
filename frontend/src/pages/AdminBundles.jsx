@@ -49,6 +49,14 @@ function formatUGX(value) {
   return `${n.toLocaleString()} UGX`;
 }
 
+const NEUTRAL_CHIP_SX = {
+  bgcolor: 'grey.100',
+  border: 1,
+  borderColor: 'divider',
+  color: 'text.primary',
+  fontWeight: 900,
+};
+
 export default function AdminBundles() {
   // Always use card layout to avoid table clipping/hidden actions on mid-size laptops.
   // (The right panel is narrower due to the admin sidebar and left form column.)
@@ -382,8 +390,7 @@ export default function AdminBundles() {
               label={loading ? 'Loading…' : bundlesFoundLabel}
               size="small"
               sx={{
-                bgcolor: '#0ea5e9',
-                color: 'white',
+                ...NEUTRAL_CHIP_SX,
                 fontWeight: 800,
               }}
             />
@@ -527,9 +534,8 @@ export default function AdminBundles() {
                             label={isDeleted ? 'Deleted' : isActive ? 'Active' : 'Disabled'}
                             size="small"
                             sx={{
-                              bgcolor: isDeleted ? '#ef4444' : isActive ? '#16a34a' : '#64748b',
-                              color: 'white',
-                              fontWeight: 900,
+                              ...NEUTRAL_CHIP_SX,
+                              bgcolor: isDeleted ? 'grey.200' : 'grey.100',
                               flexShrink: 0,
                             }}
                           />
@@ -539,17 +545,17 @@ export default function AdminBundles() {
                           <Chip
                             label={formatDurationBadge(r.duration_minutes)}
                             size="small"
-                            sx={{ bgcolor: '#06b6d4', color: 'white', fontWeight: 900 }}
+                            sx={NEUTRAL_CHIP_SX}
                           />
                           <Chip
                             label={formatUGX(r.price_ugx)}
                             size="small"
-                            sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 900 }}
+                            sx={NEUTRAL_CHIP_SX}
                           />
                           <Chip
                             label={`Vouchers ${vouchersLabel}`}
                             size="small"
-                            sx={{ bgcolor: '#2563eb', color: 'white', fontWeight: 900 }}
+                            sx={NEUTRAL_CHIP_SX}
                           />
                         </Stack>
 
