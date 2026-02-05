@@ -974,6 +974,41 @@ export class TransactionsService {
       provider: r.payment_provider ?? 'NONE',
     }));
   }
+
+  static async safeSetTransactionSmsStatusByReference(reference, { sms_status, sms_provider } = {}) {
+    const ref = normalizeText(reference);
+    if (!ref) return { ok: false, skipped: true, reason: 'missing_reference' };
+
+    const status = String(sms_status ?? '').trim().toLowerCase();
+    const provider = String(sms_provider ?? '').trim();
+    if (!status || (status !== 'sent' && status !== 'failed')) {
+      return { ok: false, skipped: true, reason: 'invalid_sms_status' };
+    }
+    if (!provider) {
+      return { ok: false, skipped: true, reason: 'missing_sms_provider' };
+    }
+
+    try {
+      await query(
+        `
+        UPDATE transactions
+        SET sms_status = $2,
+          sms_provider = $3,
+          updated_at = NOW()
+        WHERE reference = $1
+        `,
+        [ref, status, provider]
+      );
+      return { ok: true };
+    } catch (err) {
+      // Missing columns or missing table must never break core flows.
+      if (isUndefinedColumn(err) || err?.code === '42P01') {
+        return { ok: false, skipped: true, reason: err?.code ?? 'schema_missing' };
+      }
+      // Best-effort: swallow other DB failures.
+      return { ok: false, skipped: true, reason: 'db_error' };
+    }
+  }
 }
 
 export function toHttpError(err) {
