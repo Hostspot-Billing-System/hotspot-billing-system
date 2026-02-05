@@ -144,6 +144,24 @@ async function main() {
       await applySqlFile('../sql/migrations/20260202_001_transactions_voucher_attempts.sql');
     }
 
+    // 4b) transactions: allow deleting packages without FK errors by setting bundle_id to NULL
+    // when a referenced package is deleted.
+    const fkRes = await pool.query(
+      `
+      SELECT c.confdeltype
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'transactions'
+        AND c.conname = 'transactions_bundle_id_fkey'
+      LIMIT 1
+      `
+    );
+    // 'n' = ON DELETE SET NULL
+    const fkIsSetNull = String(fkRes.rows?.[0]?.confdeltype ?? '') === 'n';
+    if (!fkIsSetNull) {
+      await applySqlFile('../sql/migrations/20260205_002_transactions_bundle_fk_set_null.sql');
+    }
+
     // Admin direct sale audit fields
     const needsTxSource = !(await columnExists('transactions', 'source'));
     const needsTxVoucherId = !(await columnExists('transactions', 'voucher_id'));
@@ -161,7 +179,7 @@ async function main() {
     console.warn("Table 'transactions' not found. Skipping transactions migrations.");
   }
 
-  // 4b) vouchers: add used_by for direct sale attribution
+  // 4d) vouchers: add used_by for direct sale attribution
   if (await tableExists('vouchers')) {
     const needsUsedBy = !(await columnExists('vouchers', 'used_by'));
     if (needsUsedBy) {

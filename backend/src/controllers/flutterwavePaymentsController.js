@@ -1,5 +1,7 @@
 import { pool, query } from '../config/db.js';
 import { TransactionsService } from '../services/transactionsService.js';
+import { env } from '../config/env.js';
+import { SmsService } from '../services/sms/SmsService.js';
 import {
   flutterwaveChargeMobileMoneyUganda,
   flutterwaveVerifyTransaction,
@@ -7,6 +9,11 @@ import {
   normalizeUgandaNetwork,
   toFlutterwaveHttpError,
 } from '../services/flutterwaveService.js';
+
+function isMockMode() {
+  const mode = String(env.MT_MODE ?? 'real').toLowerCase();
+  return Boolean(env.MIKROTIK_MOCK || mode === 'mock');
+}
 
 function normalizeText(value) {
   const trimmed = String(value ?? '').trim();
@@ -119,6 +126,143 @@ export async function initiateFlutterwaveMobileMoneyPayment(req, res) {
       `,
       [tx.reference]
     );
+
+    // In mock mode (local dev/demo), do not call Flutterwave.
+    // Simulate a successful payment by immediately assigning a voucher and
+    // completing the transaction.
+    if (isMockMode()) {
+      const voucherRes = await client.query(
+        `
+        SELECT id, code
+        FROM vouchers
+        WHERE package_id = $1
+          AND status = 'available'
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY id ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+        `,
+        [Number(bundle.id)]
+      );
+
+      const voucher = voucherRes.rows?.[0] ?? null;
+
+      if (!voucher?.id || !voucher?.code) {
+        await TransactionsService.markTransactionFailedTransactional(client, tx.reference, {
+          failure_reason: 'NO_VOUCHERS_AVAILABLE',
+          payment_provider: network,
+          provider_tx_id: null,
+        });
+        await client.query('COMMIT');
+        return res.status(200).json({
+          success: true,
+          data: {
+            tx_ref: tx.reference,
+            status: 'failed',
+            message: 'No vouchers available for this bundle',
+          },
+        });
+      }
+
+      try {
+        await client.query(
+          `
+          UPDATE vouchers
+          SET status = 'used',
+              used_at = NOW(),
+              used_by = COALESCE(used_by, $2)
+          WHERE id = $1
+          `,
+          [Number(voucher.id), phone.e164]
+        );
+      } catch (err) {
+        if (!isUndefinedColumn(err)) throw err;
+        await client.query(
+          `
+          UPDATE vouchers
+          SET status = 'used',
+              used_at = NOW()
+          WHERE id = $1
+          `,
+          [Number(voucher.id)]
+        );
+      }
+
+      await TransactionsService.markTransactionCompletedTransactional(client, tx.reference, {
+        payment_provider: network,
+        provider_tx_id: 'mock',
+      });
+
+      await safeQueryTransactional(
+        client,
+        `
+          UPDATE transactions
+          SET voucher_id = $2,
+              voucher_code = $3,
+              source = COALESCE(source, 'flutterwave'),
+              flutterwave_id = COALESCE(flutterwave_id, 'mock'),
+              flutterwave_tx_ref = COALESCE(flutterwave_tx_ref, reference)
+          WHERE reference = $1
+        `,
+        [tx.reference, Number(voucher.id), String(voucher.code).slice(0, 50)]
+      );
+
+      await client.query('COMMIT');
+
+      // Best-effort: send voucher SMS via UGSMS. Must never block payment success.
+      void (async () => {
+        try {
+          const expiresAt =
+            bundle?.duration_minutes && Number.isFinite(Number(bundle.duration_minutes)) && Number(bundle.duration_minutes) > 0
+              ? new Date(Date.now() + Number(bundle.duration_minutes) * 60 * 1000).toISOString()
+              : '';
+
+          const sms = await SmsService.sendCustomerVoucherSms({
+            phone: tx.customer_phone ?? phone.e164,
+            voucherCode: voucher.code,
+            bundleName: bundle?.name ?? 'WiFi',
+            expiresAt,
+          });
+
+          if (sms?.success) {
+            console.log('[SMS] Sent via UGSMS to', tx.customer_phone ?? phone.e164);
+            await TransactionsService.safeSetTransactionSmsStatusByReference(tx.reference, {
+              sms_status: 'sent',
+              sms_provider: 'UGSMS',
+            });
+          } else {
+            const errorMessage = String(
+              sms?.errorMessage ?? sms?.rawResponse?.message ?? sms?.rawResponse?.error ?? 'SMS failed'
+            ).trim();
+            console.error('[SMS FAILED]', errorMessage);
+            await TransactionsService.safeSetTransactionSmsStatusByReference(tx.reference, {
+              sms_status: 'failed',
+              sms_provider: 'UGSMS',
+            });
+          }
+        } catch (err) {
+          console.error('[SMS FAILED]', err?.message ?? err);
+          try {
+            await TransactionsService.safeSetTransactionSmsStatusByReference(tx.reference, {
+              sms_status: 'failed',
+              sms_provider: 'UGSMS',
+            });
+          } catch {
+            // ignore
+          }
+        }
+      })();
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          tx_ref: tx.reference,
+          status: 'pending',
+          message: 'Mock payment successful',
+          flutterwave: { status: 'success', message: 'mock' },
+        },
+      });
+    }
 
     await client.query('COMMIT');
 
@@ -346,6 +490,60 @@ export async function flutterwaveWebhookHandler(req, res) {
     );
 
     await client.query('COMMIT');
+
+    // Best-effort: send voucher SMS via UGSMS. Must never block webhook success.
+    void (async () => {
+      try {
+        let bundleName = 'WiFi';
+        let durationMinutes = null;
+        try {
+          const bRes = await query('SELECT name, duration_minutes FROM packages WHERE id = $1 LIMIT 1', [Number(tx.bundle_id)]);
+          bundleName = bRes.rows?.[0]?.name ?? bundleName;
+          durationMinutes = bRes.rows?.[0]?.duration_minutes == null ? null : Number(bRes.rows?.[0]?.duration_minutes);
+        } catch {
+          // ignore
+        }
+
+        const expiresAt =
+          durationMinutes != null && Number.isFinite(durationMinutes) && durationMinutes > 0
+            ? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString()
+            : '';
+
+        const sms = await SmsService.sendCustomerVoucherSms({
+          phone: tx.customer_phone,
+          voucherCode: voucher.code,
+          bundleName,
+          expiresAt,
+        });
+
+        if (sms?.success) {
+          console.log('[SMS] Sent via UGSMS to', tx.customer_phone);
+          await TransactionsService.safeSetTransactionSmsStatusByReference(txRef, {
+            sms_status: 'sent',
+            sms_provider: 'UGSMS',
+          });
+        } else {
+          const errorMessage = String(
+            sms?.errorMessage ?? sms?.rawResponse?.message ?? sms?.rawResponse?.error ?? 'SMS failed'
+          ).trim();
+          console.error('[SMS FAILED]', errorMessage);
+          await TransactionsService.safeSetTransactionSmsStatusByReference(txRef, {
+            sms_status: 'failed',
+            sms_provider: 'UGSMS',
+          });
+        }
+      } catch (err) {
+        console.error('[SMS FAILED]', err?.message ?? err);
+        try {
+          await TransactionsService.safeSetTransactionSmsStatusByReference(txRef, {
+            sms_status: 'failed',
+            sms_provider: 'UGSMS',
+          });
+        } catch {
+          // ignore
+        }
+      }
+    })();
 
     return res.status(200).json({
       success: true,

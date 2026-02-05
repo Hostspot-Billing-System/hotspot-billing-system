@@ -17,6 +17,7 @@ import { MobileMoneyService, toHttpError as toMobileMoneyHttpError } from '../se
 import { env } from '../config/env.js';
 import { mockRuntimeService } from '../services/MockRuntimeService.js';
 import { sendSMS } from '../services/smsService.js';
+import { SmsService } from '../services/sms/SmsService.js';
 
 function isMockMode() {
 	const mode = String(env.MT_MODE ?? 'real').toLowerCase();
@@ -1028,6 +1029,53 @@ export async function postPortalBuyBundleHandler(req, res) {
 		await dbClient.query('COMMIT');
 		dbClient.release();
 		dbClient = null;
+
+		// Best-effort: send voucher SMS via UGSMS. Must never block user flow.
+		const expiresAt =
+			Number.isFinite(durationMinutes) && durationMinutes > 0
+				? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString()
+				: null;
+		const transactionReference = tx.reference;
+		const voucherCode = voucherRow.code;
+		const bundleName = String(packageRow?.name ?? '').trim() || String(packageRow?.mikrotik_profile ?? '').trim() || 'WiFi';
+
+		void (async () => {
+			try {
+				const sms = await SmsService.sendCustomerVoucherSms({
+					phone,
+					voucherCode,
+					bundleName,
+					expiresAt: expiresAt ?? '',
+				});
+
+				if (sms?.success) {
+					console.log('[SMS] Sent via UGSMS to', rawPhone);
+					await TransactionsService.safeSetTransactionSmsStatusByReference(transactionReference, {
+						sms_status: 'sent',
+						sms_provider: 'UGSMS',
+					});
+				} else {
+					const errorMessage = String(
+						sms?.errorMessage ?? sms?.rawResponse?.message ?? sms?.rawResponse?.error ?? 'SMS failed'
+					).trim();
+					console.error('[SMS FAILED]', errorMessage);
+					await TransactionsService.safeSetTransactionSmsStatusByReference(transactionReference, {
+						sms_status: 'failed',
+						sms_provider: 'UGSMS',
+					});
+				}
+			} catch (err) {
+				console.error('[SMS FAILED]', err?.message ?? err);
+				try {
+					await TransactionsService.safeSetTransactionSmsStatusByReference(transactionReference, {
+						sms_status: 'failed',
+						sms_provider: 'UGSMS',
+					});
+				} catch {
+					// ignore
+				}
+			}
+		})();
 
 		return res.status(200).json({
 			success: true,
