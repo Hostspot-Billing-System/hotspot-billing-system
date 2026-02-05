@@ -11,12 +11,14 @@ import {
   DialogTitle,
   Divider,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Snackbar,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material';
@@ -70,6 +72,7 @@ export default function AdminBundles() {
   const [draftSearch, setDraftSearch] = useState('');
   const [draftStatus, setDraftStatus] = useState('all');
   const [filters, setFilters] = useState({ q: '', status: 'all' });
+  const [includeDeleted, setIncludeDeleted] = useState(false);
 
   const [form, setForm] = useState({ name: '', duration: '', price: '', description: '' });
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'info' });
@@ -78,7 +81,7 @@ export default function AdminBundles() {
     setLoading(true);
     setError(null);
     try {
-      const list = await listBundles();
+      const list = await listBundles(includeDeleted ? { include_deleted: true } : undefined);
       setRows(Array.isArray(list) ? list : []);
     } catch (err) {
       setError(extractBackendError(err));
@@ -94,7 +97,7 @@ export default function AdminBundles() {
       try {
         setLoading(true);
         setError(null);
-        const list = await listBundles();
+        const list = await listBundles(includeDeleted ? { include_deleted: true } : undefined);
         if (cancelled) return;
         setRows(Array.isArray(list) ? list : []);
       } catch (err) {
@@ -108,7 +111,7 @@ export default function AdminBundles() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [includeDeleted]);
 
   function parseRequiredInt(value) {
     const n = Number(String(value ?? '').trim());
@@ -258,6 +261,9 @@ export default function AdminBundles() {
     const status = String(filters.status ?? 'all');
     return rows.filter((r) => {
       const isActive = Boolean(r?.is_active ?? true);
+      const isDeleted = Boolean(r?.is_deleted ?? false);
+      if (status === 'deleted' && !isDeleted) return false;
+      if (status !== 'deleted' && isDeleted) return false;
       if (status === 'active' && !isActive) return false;
       if (status === 'disabled' && isActive) return false;
       if (!q) return true;
@@ -426,8 +432,16 @@ export default function AdminBundles() {
                     <MenuItem value="all">All Statuses</MenuItem>
                     <MenuItem value="active">Active</MenuItem>
                     <MenuItem value="disabled">Disabled</MenuItem>
+                    <MenuItem value="deleted">Deleted</MenuItem>
                   </Select>
                 </FormControl>
+              </Box>
+
+              <Box sx={{ width: { xs: '100%', md: 200 }, pt: { xs: 0.5, xl: 2.3 } }}>
+                <FormControlLabel
+                  control={<Switch checked={includeDeleted} onChange={(e) => setIncludeDeleted(e.target.checked)} />}
+                  label={<Typography variant="body2" sx={{ fontWeight: 900 }}>Show deleted</Typography>}
+                />
               </Box>
 
               <Stack direction="row" spacing={1} sx={{ pt: { xs: 0.5, xl: 2.3 } }}>
@@ -489,6 +503,7 @@ export default function AdminBundles() {
               ) : (
                 filteredRows.map((r) => {
                   const isActive = Boolean(r?.is_active ?? true);
+                  const isDeleted = Boolean(r?.is_deleted ?? false);
                   const vouchersAvailable = r?.vouchers_available;
                   const vouchersTotal = r?.vouchers_total;
                   const vouchersLabel =
@@ -509,10 +524,10 @@ export default function AdminBundles() {
                             </Typography>
                           </Box>
                           <Chip
-                            label={isActive ? 'Active' : 'Disabled'}
+                            label={isDeleted ? 'Deleted' : isActive ? 'Active' : 'Disabled'}
                             size="small"
                             sx={{
-                              bgcolor: isActive ? '#16a34a' : '#64748b',
+                              bgcolor: isDeleted ? '#ef4444' : isActive ? '#16a34a' : '#64748b',
                               color: 'white',
                               fontWeight: 900,
                               flexShrink: 0,
@@ -545,6 +560,7 @@ export default function AdminBundles() {
                             size="small"
                             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
                             onClick={() => openEdit(r)}
+                            disabled={isDeleted}
                           >
                             Edit
                           </Button>
@@ -554,7 +570,7 @@ export default function AdminBundles() {
                             size="small"
                             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
                             onClick={() => onToggleStatus(r)}
-                            disabled={statusLoading}
+                            disabled={statusLoading || isDeleted}
                           >
                             {statusLoading ? 'Updating…' : isActive ? 'Disable' : 'Enable'}
                           </Button>
@@ -565,6 +581,7 @@ export default function AdminBundles() {
                             color="error"
                             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 1.25 }}
                             onClick={() => openDelete(r)}
+                            disabled={isDeleted}
                           >
                             Delete
                           </Button>

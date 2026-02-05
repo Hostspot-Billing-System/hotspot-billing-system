@@ -91,3 +91,19 @@ export async function buyBundle({ phone, bundle_id, bundleId } = {}) {
 	const res = await api.post('/api/portal/buy', { phone, bundle_id: effectiveBundleId, payment_provider: 'MTN' });
 	return unwrapSuccess(res.data);
 }
+
+// Flutterwave mobile money (MTN/Airtel Uganda)
+export async function initiateFlutterwavePayment({ phoneNumber, bundleId, network } = {}) {
+	const res = await api.post('/api/payments/flutterwave/initiate', {
+		phoneNumber,
+		bundleId,
+		network,
+	});
+	return unwrapSuccess(res.data);
+}
+
+export async function fetchPaymentStatus(txRef) {
+	const ref = String(txRef ?? '').trim();
+	const res = await api.get(`/api/payments/status/${encodeURIComponent(ref)}`);
+	return unwrapSuccess(res.data);
+}

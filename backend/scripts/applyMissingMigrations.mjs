@@ -150,6 +150,13 @@ async function main() {
     if (needsTxSource || needsTxVoucherId) {
       await applySqlFile('../sql/migrations/20260203_004_add_transactions_source_and_voucher_id.sql');
     }
+
+    // 4c) transactions: Flutterwave reconciliation fields
+    const needsFlwTxRef = !(await columnExists('transactions', 'flutterwave_tx_ref'));
+    const needsFlwId = !(await columnExists('transactions', 'flutterwave_id'));
+    if (needsFlwTxRef || needsFlwId) {
+      await applySqlFile('../sql/migrations/20260205_001_add_flutterwave_fields_to_transactions.sql');
+    }
   } else {
     console.warn("Table 'transactions' not found. Skipping transactions migrations.");
   }

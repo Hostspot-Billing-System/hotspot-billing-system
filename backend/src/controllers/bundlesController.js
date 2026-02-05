@@ -84,6 +84,7 @@ export async function listBundles(req, res) {
         ${hasPriceUgx ? 'p.price_ugx::int AS price_ugx' : 'NULL::int AS price_ugx'},
         ${hasDescription ? 'p.description' : 'NULL::text AS description'},
         ${hasIsActive ? 'p.is_active' : 'TRUE AS is_active'},
+        ${hasDeletedAt ? 'p.deleted_at' : 'NULL::timestamptz AS deleted_at'},
         p.created_at,
         ${hasUpdatedAt ? 'p.updated_at' : 'p.created_at AS updated_at'},
         COALESCE(vc.total, 0)::int AS vouchers_total,
@@ -105,6 +106,8 @@ export async function listBundles(req, res) {
 
     const rows = (result.rows ?? []).map((r) => {
       const isActive = Boolean(r?.is_active ?? true);
+      const deletedAt = r?.deleted_at ?? null;
+      const isDeleted = Boolean(deletedAt);
       return {
         id: String(r.id),
         name: r.name,
@@ -113,6 +116,8 @@ export async function listBundles(req, res) {
         description: r.description ?? null,
         status: toStatus(isActive),
         is_active: isActive,
+        is_deleted: isDeleted,
+        deleted_at: deletedAt,
         mikrotik_profile: r.mikrotik_profile ?? null,
         created_at: r.created_at,
         updated_at: r.updated_at,

@@ -3,9 +3,10 @@ import React from 'react';
 import PortalLayout from './PortalLayout.jsx';
 import PortalSuccess from './PortalSuccess.jsx';
 import {
-	buyBundle,
 	fetchPortalBundles,
 	getApiErrorMessage,
+	fetchPaymentStatus,
+	initiateFlutterwavePayment,
 	voucherConnect,
 } from '../services/portal.js';
 import mtnLogo from '../assets/mtn.png';
@@ -237,18 +238,62 @@ export default function PortalHome() {
 		try {
 			setBuyError('');
 			setBuyResult(null);
-			const data = await buyBundle({ phone: msisdn, bundle_id: bundleId });
-			setBuyResult({
-				username: data?.username ?? '',
-				password: data?.password ?? '',
-				txRef: data?.transaction_reference ?? null,
-			});
+
+			setBuyCountdownSeconds(60);
+			const countdownTimer = setInterval(() => {
+				setBuyCountdownSeconds((v) => {
+					if (v == null) return v;
+					return Math.max(0, (toInt(v) ?? 0) - 1);
+				});
+			}, 1000);
+
+			try {
+				const init = await initiateFlutterwavePayment({
+					phoneNumber: msisdn,
+					bundleId,
+					network: 'MTN',
+				});
+
+				const txRef = init?.tx_ref ?? init?.txRef ?? init?.reference ?? null;
+				if (!txRef) throw new Error('Missing transaction reference.');
+
+				const startedAt = Date.now();
+				const timeoutMs = 60 * 1000;
+
+				while (Date.now() - startedAt < timeoutMs) {
+					const st = await fetchPaymentStatus(txRef);
+					const status = String(st?.status ?? '').toLowerCase();
+
+					if (status === 'successful' || status === 'success' || status === 'completed') {
+						const voucher = st?.voucher_code ?? st?.voucherCode ?? null;
+						setBuyResult({
+							username: voucher ? String(voucher) : '',
+							password: '',
+							txRef,
+						});
+						setShowSuccessOverlay(true);
+						setSuccessAutoCloseSeconds(3);
+						return;
+					}
+
+					if (status === 'failed') {
+						const reason = st?.failure_reason ?? st?.failureReason ?? 'Payment failed. Please try again.';
+						throw new Error(String(reason));
+					}
+
+					await new Promise((r) => setTimeout(r, 2000));
+				}
+
+				throw new Error('Payment confirmation timed out. Please try again.');
+			} finally {
+				clearInterval(countdownTimer);
+				setBuyCountdownSeconds(null);
+			}
 		} catch (err) {
 			setBuyError(getApiErrorMessage(err) || 'Unable to complete request. Please try again.');
 		} finally {
 			inFlightRef.current.pay = false;
 			setIsBuying(false);
-			setBuyCountdownSeconds(null);
 		}
 	}
 
@@ -380,9 +425,9 @@ export default function PortalHome() {
 						/>
 					</div>
 					{buyError ? <ErrorCard message={buyError} /> : null}
-					{buyResult?.username && buyResult?.password ? (
+					{buyResult?.username ? (
 						<div aria-live="polite" className="mt-3 text-center text-[13px] font-semibold text-white/70">
-							Username: {buyResult.username} • Password: {buyResult.password}
+							Voucher: {buyResult.username}
 						</div>
 					) : null}
 				</div>

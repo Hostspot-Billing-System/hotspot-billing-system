@@ -1,5 +1,5 @@
-import app from "./src/app.js";
 import "./src/config/env.js";
+import app from "./src/app.js";
 import { env } from "./src/config/env.js";
 import { checkDbConnection } from "./src/config/db.js";
 import { startMikroTikExpiryCron } from './src/services/mikrotikExpiryService.js';

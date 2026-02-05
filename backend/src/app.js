@@ -20,6 +20,7 @@ import clientsRoutes from "./routes/clientsRoutes.js";
 import routersRoutes from "./routes/routersRoutes.js";
 import smsSettingsRoutes from "./routes/smsSettingsRoutes.js";
 import myProfileRoutes from "./routes/myProfileRoutes.js";
+import paymentsRoutes from "./routes/paymentsRoutes.js";
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use("/api/clients", clientsRoutes);
 app.use("/api/routers", routersRoutes);
 app.use("/api/sms-settings", smsSettingsRoutes);
 app.use("/api/my-profile", myProfileRoutes);
+app.use("/api/payments", paymentsRoutes);
 
 /* =========================
    ADMIN & MIKROTIK
