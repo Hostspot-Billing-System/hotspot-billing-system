@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import session from 'express-session';
+import { env } from './config/env.js';
 
 /* ROUTES */
 import healthRoutes from "./routes/healthRoutes.js";
@@ -21,6 +23,8 @@ import routersRoutes from "./routes/routersRoutes.js";
 import smsSettingsRoutes from "./routes/smsSettingsRoutes.js";
 import myProfileRoutes from "./routes/myProfileRoutes.js";
 import paymentsRoutes from "./routes/paymentsRoutes.js";
+import authRoutes from './auth/auth.routes.js';
+import requireAuth from './middleware/requireAuth.js';
 
 const app = express();
 
@@ -60,6 +64,28 @@ app.use(
 );
 
 /* =========================
+   SESSION
+========================= */
+if (!process.env.SESSION_SECRET || String(process.env.SESSION_SECRET).trim() === '') {
+   throw new Error('Missing required environment variable: SESSION_SECRET');
+}
+
+app.use(
+   session({
+      name: 'omega.sid',
+      secret: process.env.SESSION_SECRET,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+         httpOnly: true,
+         sameSite: 'lax',
+         secure: env.APP_ENV === 'production',
+         maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+   })
+);
+
+/* =========================
    MIDDLEWARE
 ========================= */
 app.use(express.json());
@@ -74,6 +100,12 @@ app.use("/api/health", healthRoutes);
 app.use("/api/runtime", runtimeRoutes);
 
 /* =========================
+   AUTH
+========================= */
+app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
+/* =========================
    PORTAL & CAPTIVE
 ========================= */
 app.use("/api/captive", captiveRoutes);
@@ -84,22 +116,22 @@ app.use("/api/portal", portalRoutes);
 ========================= */
 app.use("/api/bundles", bundlesRoutes);
 app.use("/api/packages", packagesRoutes);
-app.use("/api/vouchers", vouchersRoutes);
-app.use("/api/voucher-batches", voucherBatchesRoutes);
-app.use("/api/transactions", transactionsRoutes);
-app.use("/api/withdrawals", withdrawalsRoutes);
-app.use("/api/reports", reportsRoutes);
-app.use("/api/clients", clientsRoutes);
-app.use("/api/routers", routersRoutes);
-app.use("/api/sms-settings", smsSettingsRoutes);
-app.use("/api/my-profile", myProfileRoutes);
-app.use("/api/payments", paymentsRoutes);
+app.use("/api/vouchers", requireAuth, vouchersRoutes);
+app.use("/api/voucher-batches", requireAuth, voucherBatchesRoutes);
+app.use("/api/transactions", requireAuth, transactionsRoutes);
+app.use("/api/withdrawals", requireAuth, withdrawalsRoutes);
+app.use("/api/reports", requireAuth, reportsRoutes);
+app.use("/api/clients", requireAuth, clientsRoutes);
+app.use("/api/routers", requireAuth, routersRoutes);
+app.use("/api/sms-settings", requireAuth, smsSettingsRoutes);
+app.use("/api/my-profile", requireAuth, myProfileRoutes);
+app.use("/api/payments", requireAuth, paymentsRoutes);
 
 /* =========================
    ADMIN & MIKROTIK
 ========================= */
-app.use("/api/admin", adminRoutes);
-app.use("/api/mikrotik", mikrotikRoutes);
+app.use("/api/admin", requireAuth, adminRoutes);
+app.use("/api/mikrotik", requireAuth, mikrotikRoutes);
 
 /* =========================
    FALLBACK

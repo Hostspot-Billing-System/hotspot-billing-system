@@ -28,12 +28,15 @@
     "cors": "^2.8.6",
     "csv-parser": "^3.2.0",
     "dotenv": "^17.2.3",
+    "express-rate-limit": "^8.1.0",
+    "express-session": "^1.18.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "node-cron": "^3.0.3",
-    "node-routeros": "^1.6.8",
     "pg": "^8.17.2",
+    "resend": "^4.7.0",
+    "node-routeros": "^1.6.8",
     "routeros-client": "^1.1.1"
   },
   "devDependencies": {
