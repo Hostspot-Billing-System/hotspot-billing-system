@@ -4,6 +4,7 @@ import { alpha, useTheme } from '@mui/material/styles';
 import { api } from '../services/api';
 import FullPageLoader from '../components/FullPageLoader.jsx';
 import billingLogo from '../assets/billing_logo.png';
+import { useColorMode } from '../theme/colorMode.js';
 
 function navigateTo(path) {
   if (typeof window === 'undefined') return;
@@ -96,6 +97,7 @@ function CheckCircleIcon({ size = 16 }) {
 
 export default function AdminLogin() {
   const theme = useTheme();
+  const { mode, toggleDarkMode } = useColorMode();
   const [step, setStep] = useState('login'); // 'login' | 'otp'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -141,11 +143,6 @@ export default function AdminLogin() {
         opacity: 1,
       },
     };
-  }, [theme]);
-
-  const loginInputSx = useMemo(() => {
-    // Kept for compatibility with older designs; currently aligns with the standard input styling.
-    return inputSx;
   }, [theme]);
 
   const canSubmitLogin = useMemo(() => {
@@ -295,9 +292,25 @@ export default function AdminLogin() {
           alignItems: 'center',
           justifyContent: 'center',
           p: 2,
-          background: theme.palette.grey[50],
+          background: theme.palette.background.default,
         }}
       >
+        <Box sx={{ position: 'fixed', top: 16, right: 16, zIndex: (t) => t.zIndex.modal + 2 }}>
+          <Button
+            variant="outlined"
+            onClick={toggleDarkMode}
+            sx={{
+              borderRadius: 999,
+              textTransform: 'none',
+              fontWeight: 800,
+              px: 1.6,
+              py: 0.7,
+            }}
+          >
+            {mode === 'dark' ? 'Light mode' : 'Dark mode'}
+          </Button>
+        </Box>
+
         <Box sx={{ width: '100%', maxWidth: 340 }}>
           <Card
             sx={{

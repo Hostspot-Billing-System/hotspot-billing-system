@@ -1,3 +1,19 @@
+# Hotspot Billing System (Frontend)
+
+## Dark Mode
+
+Theme preference is global and persisted in `localStorage`:
+
+- Key: `hotspot.themePreference`
+- Values: `system` (default), `light`, `dark`
+
+Toggle locations:
+
+- Login screen: top-right toggle
+- Admin dashboard: sidebar toggle
+
+---
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

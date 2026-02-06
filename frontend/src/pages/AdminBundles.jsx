@@ -50,10 +50,10 @@ function formatUGX(value) {
 }
 
 const NEUTRAL_CHIP_SX = {
-  bgcolor: 'grey.100',
+  bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#444444' : theme.palette.grey[100]),
   border: 1,
   borderColor: 'divider',
-  color: 'text.primary',
+  color: (theme) => (theme.palette.mode === 'dark' ? theme.palette.common.white : theme.palette.text.primary),
   fontWeight: 900,
 };
 
@@ -535,7 +535,18 @@ export default function AdminBundles() {
                             size="small"
                             sx={{
                               ...NEUTRAL_CHIP_SX,
-                              bgcolor: isDeleted ? 'grey.200' : 'grey.100',
+                              bgcolor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? '#444444'
+                                  : isDeleted
+                                    ? theme.palette.grey[200]
+                                    : theme.palette.grey[100],
+                              color: (theme) =>
+                                !isDeleted && isActive
+                                  ? theme.palette.success.main
+                                  : theme.palette.mode === 'dark'
+                                    ? theme.palette.common.white
+                                    : theme.palette.text.primary,
                               flexShrink: 0,
                             }}
                           />

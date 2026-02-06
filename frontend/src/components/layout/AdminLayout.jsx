@@ -169,7 +169,7 @@ export default function AdminLayout({
         component="main"
         sx={{
           ml: { xs: 0, lg: `${drawerWidth}px` },
-          bgcolor: (theme) => theme.palette.grey[50],
+          bgcolor: 'background.default',
           minHeight: '100vh',
           minWidth: 0,
         }}

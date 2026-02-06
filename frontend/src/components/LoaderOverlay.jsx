@@ -5,7 +5,6 @@ import { useMemo } from 'react';
 function buildSixSegmentGradient() {
   // 6 segments, each 60deg. We reserve a small gap per segment.
   const segmentDeg = 52;
-  const gapDeg = 8;
 
   const stops = [];
   for (let i = 0; i < 6; i += 1) {
