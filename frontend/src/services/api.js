@@ -35,6 +35,7 @@ if (!baseURL) {
 export const api = axios.create({
   baseURL,
   timeout: 15000,
+  withCredentials: true,
 });
 
 // Temporary debug logging (dev only)
