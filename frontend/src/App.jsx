@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import AdminBundles from './pages/AdminBundles';
 import AdminTransactions from './pages/AdminTransactions';
 import AdminWithdraw from './pages/AdminWithdraw';
@@ -46,6 +48,8 @@ export default function App() {
     const isPortal = path === '/portal' || path?.startsWith('/portal/');
     if (isPortal) return;
 
+    const isPublicAuth = path === '/admin/login' || path === '/forgot-password' || path === '/reset-password';
+
     async function checkSession() {
       try {
         const res = await api.get('/api/auth/me');
@@ -58,13 +62,13 @@ export default function App() {
           return;
         }
 
-        if (!isAuthenticated && path !== '/admin/login') {
+        if (!isAuthenticated && !isPublicAuth) {
           navigateTo('/admin/login');
         }
       } catch {
         if (cancelled) return;
         setAuth({ checked: true, isAuthenticated: false });
-        if (path !== '/admin/login') navigateTo('/admin/login');
+        if (!isPublicAuth) navigateTo('/admin/login');
       }
     }
 
@@ -93,6 +97,8 @@ export default function App() {
     }
 
     if (path === '/admin/login') return <AdminLogin />;
+    if (path === '/forgot-password') return <ForgotPassword />;
+    if (path === '/reset-password') return <ResetPassword />;
 
     // Quick Action aliases (logic-only)
     if (path === '/vouchers') return <AdminVouchers />;
@@ -138,6 +144,8 @@ export default function App() {
 
   // If not authenticated, show login without admin chrome.
   if (!auth.isAuthenticated) {
+    if (path === '/forgot-password') return <ForgotPassword />;
+    if (path === '/reset-password') return <ResetPassword />;
     return <AdminLogin />;
   }
 

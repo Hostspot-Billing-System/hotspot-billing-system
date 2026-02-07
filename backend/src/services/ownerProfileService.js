@@ -106,7 +106,7 @@ export async function updateOwnerProfileByUserId(userId, payload = {}) {
 
   // Username is display-only in the current UI; keep existing if not provided.
   const existing = await query('SELECT username FROM owner_profile WHERE user_id = $1 LIMIT 1', [uid]);
-  const currentUsername = String(existing.rows?.[0]?.username ?? 'Owner');
+  const currentUsername = String(existing.rows?.[0]?.username ?? 'omega');
 
   const username = payload?.username == null || String(payload.username).trim() === ''
     ? currentUsername
@@ -176,6 +176,42 @@ export async function changeOwnerPasswordByUserId(userId, { current_password, ne
   const hashed = hashPasswordScrypt(next);
   await query('UPDATE owner_profile SET password_hash = $2 WHERE user_id = $1', [uid, hashed]);
   return { ok: true };
+}
+
+export async function updateOwnerUsernameByUserId(userId, username) {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) throw new Error('Invalid user_id');
+
+  await ensureOwnerProfileRow(uid);
+
+  const next = String(username ?? '').trim();
+  if (!next) throw new Error('Username is required');
+  if (next.length > 64) throw new Error('Username is too long');
+
+  const res = await query(
+    `
+    UPDATE owner_profile
+    SET username = $2
+    WHERE user_id = $1
+    RETURNING
+      user_id,
+      username,
+      email,
+      phone_number,
+      business_name,
+      business_address,
+      account_status,
+      account_expires_at,
+      commission_rate,
+      member_since,
+      last_login_at,
+      created_at,
+      updated_at
+    `,
+    [uid, next]
+  );
+
+  return res.rows?.[0] ?? null;
 }
 
 export function toPublicOwnerProfile(row) {

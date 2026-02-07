@@ -221,7 +221,7 @@ export default function MyProfile() {
 
   const [sms, setSms] = useState(useDefaultSmsForm());
 
-  const [pw, setPw] = useState({ current_password: '', new_password: '', confirm_new_password: '' });
+  const [pw, setPw] = useState({ new_username: '', current_password: '', new_password: '', confirm_new_password: '' });
   const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false, sms: false });
 
   useEffect(() => {
@@ -422,11 +422,16 @@ export default function MyProfile() {
     setSavingPassword(true);
     try {
       await changeMyPassword({
+        new_username: String(pw.new_username ?? '').trim() || undefined,
         current_password: String(pw.current_password ?? ''),
         new_password: String(pw.new_password ?? ''),
         confirm_new_password: String(pw.confirm_new_password ?? ''),
       });
-      setPw({ current_password: '', new_password: '', confirm_new_password: '' });
+      const nextUsername = String(pw.new_username ?? '').trim();
+      if (nextUsername) {
+        setProfile((prev) => ({ ...prev, username: nextUsername }));
+      }
+      setPw({ new_username: '', current_password: '', new_password: '', confirm_new_password: '' });
       setSnack({ open: true, message: 'Password changed', severity: 'success' });
     } catch (e) {
       const msg = e?.response?.data?.error?.message ?? e?.message ?? 'Failed to change password';
@@ -501,7 +506,7 @@ export default function MyProfile() {
                   >
                     <Box>
                       <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Username</Typography>
-                      <TextField value={profile.username} disabled size="small" fullWidth helperText="Username cannot be changed" />
+                        <TextField value={profile.username} disabled size="small" fullWidth helperText="Change username in the Change Password section" />
                     </Box>
                     <Box>
                       <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Email Address</Typography>
@@ -824,6 +829,18 @@ export default function MyProfile() {
               <CardContent>
                 <Stack spacing={1.5}>
                   <CardTitle icon={<SectionIcon name="lock" />} title="Change Password" />
+
+                  <Box>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>New Username (optional)</Typography>
+                    <TextField
+                      value={pw.new_username}
+                      onChange={(e) => setPw((s) => ({ ...s, new_username: e.target.value }))}
+                      size="small"
+                      fullWidth
+                      disabled={loading || savingPassword}
+                      helperText="Leave blank to keep current username"
+                    />
+                  </Box>
 
                   <Box>
                     <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Current Password</Typography>

@@ -40,8 +40,6 @@ function LoaderGlyph({ delayMs = 0 }) {
 }
 
 export default function FullPageLoader() {
-  const theme = useTheme();
-
   return (
     <Box
       role="status"
@@ -50,7 +48,7 @@ export default function FullPageLoader() {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        backgroundColor: theme.palette.primary.main,
+        backgroundColor: '#131a2a',
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.25 }}>

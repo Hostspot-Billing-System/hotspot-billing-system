@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { alpha, useTheme } from '@mui/material/styles';
 import { api } from '../services/api';
@@ -95,12 +95,71 @@ function CheckCircleIcon({ size = 16 }) {
   );
 }
 
+function EyeIcon({ off }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        width: 18,
+        height: 18,
+        display: 'inline-block',
+        borderRadius: 1,
+        border: '1.8px solid',
+        borderColor: 'text.secondary',
+        position: 'relative',
+        opacity: off ? 0.7 : 1,
+      }}
+    >
+      <Box
+        component="span"
+        sx={{
+          position: 'absolute',
+          left: 3,
+          top: 4,
+          width: 10,
+          height: 7,
+          borderRadius: '10px',
+          border: '1.8px solid',
+          borderColor: 'text.secondary',
+        }}
+      />
+      <Box
+        component="span"
+        sx={{
+          position: 'absolute',
+          left: 8,
+          top: 7,
+          width: 2.5,
+          height: 2.5,
+          borderRadius: '50%',
+          bgcolor: 'text.secondary',
+        }}
+      />
+      {off ? (
+        <Box
+          component="span"
+          sx={{
+            position: 'absolute',
+            left: -1,
+            top: 8,
+            width: 22,
+            height: 2,
+            bgcolor: 'text.secondary',
+            transform: 'rotate(-20deg)',
+          }}
+        />
+      ) : null}
+    </Box>
+  );
+}
+
 export default function AdminLogin() {
   const theme = useTheme();
   const { mode, toggleDarkMode } = useColorMode();
   const [step, setStep] = useState('login'); // 'login' | 'otp'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState(() => Array(6).fill(''));
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -203,6 +262,10 @@ export default function AdminLogin() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function onForgotPassword() {
+    navigateTo('/forgot-password');
   }
 
   async function onSubmitOtp(e) {
@@ -357,7 +420,7 @@ export default function AdminLogin() {
                       />
 
                       <TextField
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         autoComplete="current-password"
@@ -365,7 +428,36 @@ export default function AdminLogin() {
                         fullWidth
                         size="small"
                         sx={inputSx}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowPassword((s) => !s)}
+                                edge="end"
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                              >
+                                <EyeIcon off={!showPassword} />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
                       />
+
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: -0.5 }}>
+                        <Button
+                          variant="text"
+                          onClick={onForgotPassword}
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            px: 0,
+                            minWidth: 0,
+                            color: theme.palette.text.secondary,
+                          }}
+                        >
+                          Forgot password?
+                        </Button>
+                      </Box>
 
                       <Button
                         type="submit"

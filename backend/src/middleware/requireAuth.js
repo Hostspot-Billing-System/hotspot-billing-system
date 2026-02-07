@@ -12,7 +12,12 @@ export function computeDeviceFingerprint(req) {
 
 export default function requireAuth(req, res, next) {
   const session = req.session;
-  if (!session?.user || session.user.username !== 'omega' || session.user.role !== 'admin') {
+  if (!session?.user || session.user.role !== 'admin') {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+
+  // If user_id is present, enforce it (single-tenant owner account).
+  if (session.user.user_id != null && Number(session.user.user_id) !== 1) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
 
