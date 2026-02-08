@@ -4,6 +4,7 @@ import {
   getOwnerProfileByUserId,
   toPublicAccountInfo,
   toPublicOwnerProfile,
+  updateOwnerUsernameByUserId,
   updateOwnerProfileByUserId,
 } from '../services/ownerProfileService.js';
 
@@ -66,6 +67,14 @@ export async function postMyProfileChangePasswordHandler(req, res) {
     const current_password = req.body?.current_password;
     const new_password = req.body?.new_password;
     const confirm_new_password = req.body?.confirm_new_password;
+    const new_username = req.body?.new_username;
+
+    if (new_username != null && String(new_username).trim() !== '') {
+      const updated = await updateOwnerUsernameByUserId(userId, new_username);
+      if (req.session?.user && updated?.username) {
+        req.session.user.username = String(updated.username);
+      }
+    }
 
     await changeOwnerPasswordByUserId(userId, {
       current_password,

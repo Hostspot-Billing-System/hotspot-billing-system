@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   Alert,
   Box,
@@ -53,16 +54,10 @@ function extractBackendError(err) {
 }
 
 const UGX = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-const UGX2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function formatUgx0(value) {
   const n = Number(value ?? 0);
   return `UGX ${UGX.format(Number.isFinite(n) ? n : 0)}`;
-}
-
-function formatUgx2(value) {
-  const n = Number(value ?? 0);
-  return `UGX ${UGX2.format(Number.isFinite(n) ? n : 0)}`;
 }
 
 function percent(value) {
@@ -78,8 +73,9 @@ function StatCard({ title, value, footer, accent }) {
       sx={{
         p: 2.5,
         borderRadius: 2.5,
-        border: '1px solid #e5e7eb',
-        bgcolor: 'common.white',
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -95,8 +91,8 @@ function StatCard({ title, value, footer, accent }) {
         }}
       />
       <Typography sx={{ fontSize: 12, fontWeight: 900, color: accent, textTransform: 'uppercase' }}>{title}</Typography>
-      <Typography sx={{ mt: 1, fontSize: 26, fontWeight: 900, color: '#0f172a' }}>{value}</Typography>
-      <Typography sx={{ mt: 1, fontSize: 13, color: '#475569' }}>{footer}</Typography>
+      <Typography sx={{ mt: 1, fontSize: 26, fontWeight: 900, color: 'text.primary' }}>{value}</Typography>
+      <Typography sx={{ mt: 1, fontSize: 13, color: 'text.secondary' }}>{footer}</Typography>
     </Paper>
   );
 }
@@ -108,17 +104,20 @@ function ChartCard({ title, children }) {
       sx={{
         p: { xs: 2, sm: 2.5 },
         borderRadius: 2.5,
-        border: '1px solid #e5e7eb',
-        bgcolor: 'common.white',
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
       }}
     >
-      <Typography sx={{ fontWeight: 900, fontSize: 13, color: '#334155', mb: 1.5 }}>{title}</Typography>
+      <Typography sx={{ fontWeight: 900, fontSize: 13, color: 'text.secondary', mb: 1.5 }}>{title}</Typography>
       {children}
     </Paper>
   );
 }
 
 export default function AdminReports() {
+  const theme = useTheme();
+
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
@@ -252,14 +251,30 @@ export default function AdminReports() {
     [paymentMethods]
   );
 
+  const gridStroke = theme.palette.divider;
+  const axisTick = theme.palette.text.secondary;
+  const tooltipStyles = useMemo(
+    () => ({
+      contentStyle: {
+        backgroundColor: theme.palette.background.paper,
+        borderColor: theme.palette.divider,
+        borderRadius: 10,
+        boxShadow: 'none',
+      },
+      labelStyle: { color: theme.palette.text.primary },
+      itemStyle: { color: theme.palette.text.primary },
+    }),
+    [theme.palette.background.paper, theme.palette.divider, theme.palette.text.primary]
+  );
+
   return (
     <Box sx={{ width: '100%', pt: { xs: 0.5, sm: 1 }, pb: { xs: 2, sm: 3 }, px: 0 }}>
       <Stack spacing={2.5}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 900, color: '#0f172a' }}>
+          <Typography variant="h5" sx={{ fontWeight: 900, color: 'text.primary' }}>
             Reports & Analytics
           </Typography>
-          <Typography sx={{ color: '#64748b', fontSize: 13, mt: 0.5 }}>{appliedRangeLabel}</Typography>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.5 }}>{appliedRangeLabel}</Typography>
         </Box>
 
         {/* Date Filter */}
@@ -268,8 +283,9 @@ export default function AdminReports() {
           sx={{
             p: { xs: 2, sm: 2.5 },
             borderRadius: 2.5,
-            border: '1px solid #e5e7eb',
-            bgcolor: 'common.white',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
           }}
         >
           <Box
@@ -289,7 +305,7 @@ export default function AdminReports() {
                 value={startDate}
                 onChange={(v) => setStartDate(v ?? null)}
                 slotProps={{
-                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'common.white' } },
+                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'background.paper' } },
                 }}
               />
               <DatePicker
@@ -297,7 +313,7 @@ export default function AdminReports() {
                 value={endDate}
                 onChange={(v) => setEndDate(v ?? null)}
                 slotProps={{
-                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'common.white' } },
+                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'background.paper' } },
                 }}
               />
             </LocalizationProvider>
@@ -370,11 +386,14 @@ export default function AdminReports() {
           <Box sx={{ width: '100%', height: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyChartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis yAxisId="left" tickFormatter={(v) => UGX.format(v)} />
-                <YAxis yAxisId="right" orientation="right" />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="label" stroke={gridStroke} tick={{ fill: axisTick }} />
+                <YAxis yAxisId="left" tickFormatter={(v) => UGX.format(v)} stroke={gridStroke} tick={{ fill: axisTick }} />
+                <YAxis yAxisId="right" orientation="right" stroke={gridStroke} tick={{ fill: axisTick }} />
                 <Tooltip
+                  contentStyle={tooltipStyles.contentStyle}
+                  labelStyle={tooltipStyles.labelStyle}
+                  itemStyle={tooltipStyles.itemStyle}
                   formatter={(value, name) => {
                     if (name === 'revenue_ugx') return [formatUgx0(value), 'Revenue'];
                     if (name === 'transactions') return [UGX.format(value), 'Transactions'];
@@ -406,10 +425,13 @@ export default function AdminReports() {
             <Box sx={{ width: '100%', height: 320 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={bundleRevenueChartData} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="bundle_name" interval={0} angle={-15} textAnchor="end" height={60} />
-                  <YAxis tickFormatter={(v) => UGX.format(v)} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="bundle_name" interval={0} angle={-15} textAnchor="end" height={60} stroke={gridStroke} tick={{ fill: axisTick }} />
+                    <YAxis tickFormatter={(v) => UGX.format(v)} stroke={gridStroke} tick={{ fill: axisTick }} />
                   <Tooltip
+                      contentStyle={tooltipStyles.contentStyle}
+                      labelStyle={tooltipStyles.labelStyle}
+                      itemStyle={tooltipStyles.itemStyle}
                     formatter={(value) => [formatUgx0(value), 'Revenue']}
                     labelFormatter={(label) => String(label)}
                   />
@@ -424,6 +446,9 @@ export default function AdminReports() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip
+                    contentStyle={tooltipStyles.contentStyle}
+                    labelStyle={tooltipStyles.labelStyle}
+                    itemStyle={tooltipStyles.itemStyle}
                     formatter={(value, name, props) => [UGX.format(value), props?.payload?.name ?? '']}
                   />
                   <Pie
@@ -435,7 +460,7 @@ export default function AdminReports() {
                     innerRadius={72}
                     outerRadius={110}
                     fill="#2563eb"
-                    stroke="#ffffff"
+                    stroke={theme.palette.background.paper}
                     strokeWidth={2}
                   />
                 </PieChart>
@@ -449,10 +474,15 @@ export default function AdminReports() {
           <Box sx={{ width: '100%', height: 340 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis allowDecimals={false} />
-                <Tooltip formatter={(value) => [UGX.format(value), 'Transactions']} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="label" stroke={gridStroke} tick={{ fill: axisTick }} />
+                <YAxis allowDecimals={false} stroke={gridStroke} tick={{ fill: axisTick }} />
+                <Tooltip
+                  contentStyle={tooltipStyles.contentStyle}
+                  labelStyle={tooltipStyles.labelStyle}
+                  itemStyle={tooltipStyles.itemStyle}
+                  formatter={(value) => [UGX.format(value), 'Transactions']}
+                />
                 <Legend />
                 <Bar dataKey="transactions" fill="#3b82f6" radius={[6, 6, 0, 0]} />
               </BarChart>
@@ -493,10 +523,10 @@ export default function AdminReports() {
           <Box sx={{ width: '100%', height: 360 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={voucherDistChartData} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="bundle_name" interval={0} angle={-10} textAnchor="end" height={60} />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="bundle_name" interval={0} angle={-10} textAnchor="end" height={60} stroke={gridStroke} tick={{ fill: axisTick }} />
+                <YAxis allowDecimals={false} stroke={gridStroke} tick={{ fill: axisTick }} />
+                <Tooltip contentStyle={tooltipStyles.contentStyle} labelStyle={tooltipStyles.labelStyle} itemStyle={tooltipStyles.itemStyle} />
                 <Legend />
                 <Bar dataKey="used" stackId="a" fill="#f59e0b" />
                 <Bar dataKey="available" stackId="a" fill="#22c55e" />
@@ -505,11 +535,19 @@ export default function AdminReports() {
           </Box>
 
           <Box sx={{ mt: 2 }}>
-            <Typography sx={{ fontWeight: 900, fontSize: 13, color: '#334155', mb: 1 }}>
+            <Typography sx={{ fontWeight: 900, fontSize: 13, color: 'text.secondary', mb: 1 }}>
               Bundle-wise Voucher Statistics
             </Typography>
             <TableContainer>
-              <Table size="small">
+              <Table
+                size="small"
+                sx={{
+                  '& th': {
+                    fontWeight: 900,
+                    bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.common.white, 0.04) : '#f8fafc'),
+                  },
+                }}
+              >
                 <TableHead>
                   <TableRow>
                     <TableCell>Bundle</TableCell>
@@ -546,7 +584,15 @@ export default function AdminReports() {
         {/* Recent Voucher Usage */}
         <ChartCard title="Recent Voucher Usage">
           <TableContainer>
-            <Table size="small">
+            <Table
+              size="small"
+              sx={{
+                '& th': {
+                  fontWeight: 900,
+                  bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.common.white, 0.04) : '#f8fafc'),
+                },
+              }}
+            >
               <TableHead>
                 <TableRow>
                   <TableCell>Voucher Code</TableCell>

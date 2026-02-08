@@ -168,8 +168,9 @@ function StatCard({ value, label }) {
         flex: 1,
         minWidth: 180,
         borderRadius: 2,
-        border: '1px solid #eef2f7',
-        bgcolor: '#f8fafc',
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
         px: 3,
         py: 2,
       }}
@@ -608,8 +609,9 @@ export default function AdminVouchers() {
           elevation={0}
           sx={{
             borderRadius: 2,
-            border: '1px solid #e5e7eb',
-            bgcolor: 'common.white',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
             minWidth: 0,
           }}
         >
@@ -657,7 +659,7 @@ export default function AdminVouchers() {
                 />
               )}
               sx={{
-                '& .MuiOutlinedInput-root': { bgcolor: 'common.white' },
+                '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' },
               }}
             />
 
@@ -674,8 +676,9 @@ export default function AdminVouchers() {
                 sx={{
                   mt: 1,
                   borderRadius: 2,
-                  border: '1px solid #e5e7eb',
-                  bgcolor: 'common.white',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
                   p: 4,
                   minHeight: 180,
                   display: 'flex',
@@ -690,10 +693,11 @@ export default function AdminVouchers() {
                       width: 42,
                       height: 42,
                       borderRadius: 999,
-                      border: '3px solid #475569',
+                      border: '3px solid',
+                      borderColor: 'divider',
                       display: 'grid',
                       placeItems: 'center',
-                      color: '#475569',
+                      color: 'text.secondary',
                     }}
                   >
                     <Typography sx={{ fontWeight: 900, fontSize: 18 }}>i</Typography>
@@ -710,8 +714,9 @@ export default function AdminVouchers() {
                   sx={{
                     mt: 0.5,
                     borderRadius: 2,
-                    border: '1px solid #e5e7eb',
-                    bgcolor: 'common.white',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
                     p: 2.5,
                   }}
                 >
@@ -794,8 +799,10 @@ export default function AdminVouchers() {
                   elevation={0}
                   sx={{
                     borderRadius: 2,
-                    border: '1px solid #eef2f7',
-                    bgcolor: '#f8fafc',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.04) : '#f8fafc',
                     p: 2,
                   }}
                 >
@@ -835,8 +842,9 @@ export default function AdminVouchers() {
             elevation={0}
             sx={{
               borderRadius: 2,
-              border: '1px solid #e5e7eb',
-              bgcolor: 'common.white',
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
               minWidth: 0,
               p: 3,
               minHeight: 210,
@@ -852,7 +860,8 @@ export default function AdminVouchers() {
                   width: 42,
                   height: 42,
                   borderRadius: 1.5,
-                  border: '2px solid #475569',
+                  border: '2px solid',
+                  borderColor: 'divider',
                   display: 'grid',
                   placeItems: 'center',
                 }}
@@ -862,7 +871,8 @@ export default function AdminVouchers() {
                   sx={{
                     width: 18,
                     height: 18,
-                    border: '2px solid #475569',
+                    border: '2px solid',
+                    borderColor: 'divider',
                     borderRadius: 0.5,
                     position: 'relative',
                     '&:before, &:after': {
@@ -870,7 +880,8 @@ export default function AdminVouchers() {
                       position: 'absolute',
                       width: 6,
                       height: 6,
-                      border: '2px solid #475569',
+                      border: '2px solid',
+                      borderColor: 'divider',
                       borderRadius: 0.5,
                       top: -6,
                     },
@@ -893,8 +904,9 @@ export default function AdminVouchers() {
               elevation={0}
               sx={{
                 borderRadius: 2,
-                border: '1px solid #e5e7eb',
-                bgcolor: 'common.white',
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
                 minWidth: 0,
               }}
             >
@@ -917,8 +929,9 @@ export default function AdminVouchers() {
               elevation={0}
               sx={{
                 borderRadius: 2,
-                border: '1px solid #e5e7eb',
-                bgcolor: 'common.white',
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
                 minWidth: 0,
               }}
             >
@@ -1060,7 +1073,8 @@ export default function AdminVouchers() {
                   </Button>
                 </Box>
 
-                <Divider sx={{ borderColor: '#eef2f7' }} />
+                <Divider sx={{ borderColor: 'divider' }} />
+                
 
                 {vouchersError ? (
                   <Alert severity="error">
@@ -1078,7 +1092,11 @@ export default function AdminVouchers() {
                       width: '100%',
                       minWidth: { xs: 920, lg: 0 },
                       '& th, & td': { py: 0.75 },
-                      '& th': { bgcolor: '#f8fafc', fontWeight: 900 },
+                      '& th': {
+                        bgcolor: (theme) =>
+                          theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.04) : '#f8fafc',
+                        fontWeight: 900,
+                      },
                     }}
                   >
                     <TableHead>
@@ -1147,8 +1165,9 @@ export default function AdminVouchers() {
                                     height: 20,
                                     fontWeight: 800,
                                     fontSize: 11,
-                                    bgcolor: '#e2e8f0',
-                                    color: '#0f172a',
+                                    bgcolor: (theme) =>
+                                      theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.08) : '#e2e8f0',
+                                    color: 'text.primary',
                                     borderRadius: 999,
                                     '& .MuiChip-label': { px: 1, py: 0 },
                                   }}
@@ -1189,8 +1208,8 @@ export default function AdminVouchers() {
                                       borderRadius: 1,
                                       borderColor: '#3b82f6',
                                       color: '#2563eb',
-                                      bgcolor: 'common.white',
-                                      '&:hover': { borderColor: '#2563eb', bgcolor: 'common.white' },
+                                      bgcolor: 'background.paper',
+                                      '&:hover': { borderColor: '#2563eb', bgcolor: 'background.paper' },
                                     }}
                                   >
                                     <Icon path={ICONS.copy} size={16} color="#2563eb" />
@@ -1205,8 +1224,8 @@ export default function AdminVouchers() {
                                       borderRadius: 1,
                                       borderColor: '#fb7185',
                                       color: '#ef4444',
-                                      bgcolor: 'common.white',
-                                      '&:hover': { borderColor: '#ef4444', bgcolor: 'common.white' },
+                                      bgcolor: 'background.paper',
+                                      '&:hover': { borderColor: '#ef4444', bgcolor: 'background.paper' },
                                     }}
                                   >
                                     <Icon path={ICONS.trash} size={16} color="#ef4444" />
@@ -1250,17 +1269,18 @@ export default function AdminVouchers() {
         PaperProps={{
           sx: {
             borderRadius: 3,
-            border: '1px solid #e5e7eb',
+            border: '1px solid',
+            borderColor: 'divider',
             boxShadow: '0 20px 60px rgba(2, 6, 23, 0.25)',
           },
         }}
       >
         <DialogContent sx={{ p: 3 }}>
-          <Typography sx={{ fontWeight: 900, fontSize: 18, mb: 0.75, color: '#0f172a' }}>
+          <Typography sx={{ fontWeight: 900, fontSize: 18, mb: 0.75, color: 'text.primary' }}>
             Delete voucher?
           </Typography>
 
-          <Typography sx={{ color: '#475569', fontSize: 13, lineHeight: 1.5 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13, lineHeight: 1.5 }}>
             This action cannot be undone. If the voucher has already been used or expired, deletion may be blocked.
           </Typography>
 
@@ -1286,7 +1306,7 @@ export default function AdminVouchers() {
                   bgcolor: '#ef4444',
                 }}
               />
-              <Typography sx={{ fontWeight: 900, color: '#0f172a', fontSize: 13 }}>
+              <Typography sx={{ fontWeight: 900, color: 'text.primary', fontSize: 13 }}>
                 {String(deleteDialog.row.code)}
               </Typography>
             </Box>
@@ -1301,10 +1321,10 @@ export default function AdminVouchers() {
             sx={{
               textTransform: 'none',
               borderRadius: 1.5,
-              borderColor: '#cbd5e1',
-              color: '#0f172a',
-              bgcolor: 'common.white',
-              '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+              borderColor: 'divider',
+              color: 'text.primary',
+              bgcolor: 'background.paper',
+              '&:hover': { borderColor: 'divider', bgcolor: 'background.paper' },
             }}
           >
             Cancel
@@ -1336,17 +1356,18 @@ export default function AdminVouchers() {
         PaperProps={{
           sx: {
             borderRadius: 3,
-            border: '1px solid #e5e7eb',
+            border: '1px solid',
+            borderColor: 'divider',
             boxShadow: '0 20px 60px rgba(2, 6, 23, 0.25)',
           },
         }}
       >
         <DialogContent sx={{ p: 3 }}>
-          <Typography sx={{ fontWeight: 900, fontSize: 18, mb: 0.75, color: '#0f172a' }}>
+          <Typography sx={{ fontWeight: 900, fontSize: 18, mb: 0.75, color: 'text.primary' }}>
             Delete selected vouchers?
           </Typography>
 
-          <Typography sx={{ color: '#475569', fontSize: 13, lineHeight: 1.5 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13, lineHeight: 1.5 }}>
             You are about to delete {bulkDeleteDialog.count} vouchers. This action cannot be undone.
           </Typography>
         </DialogContent>
@@ -1359,10 +1380,10 @@ export default function AdminVouchers() {
             sx={{
               textTransform: 'none',
               borderRadius: 1.5,
-              borderColor: '#cbd5e1',
-              color: '#0f172a',
-              bgcolor: 'common.white',
-              '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+              borderColor: 'divider',
+              color: 'text.primary',
+              bgcolor: 'background.paper',
+              '&:hover': { borderColor: 'divider', bgcolor: 'background.paper' },
             }}
           >
             Cancel
@@ -1394,21 +1415,22 @@ export default function AdminVouchers() {
         PaperProps={{
           sx: {
             borderRadius: 3,
-            border: '1px solid #e5e7eb',
+            border: '1px solid',
+            borderColor: 'divider',
             boxShadow: '0 20px 60px rgba(2, 6, 23, 0.25)',
           },
         }}
       >
         <DialogContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
-            <Typography sx={{ fontWeight: 900, fontSize: 18, color: '#0f172a' }}>
+            <Typography sx={{ fontWeight: 900, fontSize: 18, color: 'text.primary' }}>
               Sell Voucher Directly
             </Typography>
             <Button
               variant="text"
               disabled={sellDialog.selling}
               onClick={() => setSellDialog({ open: false, selling: false, row: null, phone: '', name: '', notes: '' })}
-              sx={{ minWidth: 36, px: 1, color: '#64748b', fontWeight: 900, textTransform: 'none' }}
+              sx={{ minWidth: 36, px: 1, color: 'text.secondary', fontWeight: 900, textTransform: 'none' }}
             >
               ×
             </Button>
@@ -1418,15 +1440,17 @@ export default function AdminVouchers() {
             elevation={0}
             sx={{
               borderRadius: 2,
-              border: '1px solid #bae6fd',
-              bgcolor: '#e0f2fe',
+              border: '1px solid',
+              borderColor: (theme) =>
+                theme.palette.mode === 'dark' ? alpha(theme.palette.info.main, 0.35) : '#bae6fd',
+              bgcolor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.info.main, 0.12) : '#e0f2fe'),
               p: 2,
               mb: 2,
             }}
           >
-            <Typography sx={{ fontWeight: 900, color: '#0f172a', fontSize: 13 }}>
+            <Typography sx={{ fontWeight: 900, color: 'text.primary', fontSize: 13 }}>
               Direct Sale:
-              <Typography component="span" sx={{ fontWeight: 700, color: '#0f172a', fontSize: 13 }}>
+              <Typography component="span" sx={{ fontWeight: 700, color: 'text.primary', fontSize: 13 }}>
                 {' '}This voucher will be marked as used and an SMS will be sent to the customer with the voucher details.
               </Typography>
             </Typography>
@@ -1438,19 +1462,23 @@ export default function AdminVouchers() {
             elevation={0}
             sx={{
               borderRadius: 2,
-              border: '1px solid #e5e7eb',
-              bgcolor: '#f8fafc',
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
               p: 2,
               mb: 2,
             }}
           >
-            <Typography sx={{ fontWeight: 900, color: '#0f172a', fontSize: 13 }}>
-              Code: <span style={{ color: '#2563eb' }}>{String(sellDialog.row?.code ?? '')}</span>
+            <Typography sx={{ fontWeight: 900, color: 'text.primary', fontSize: 13 }}>
+              Code:{' '}
+              <Box component="span" sx={{ color: 'primary.main' }}>
+                {String(sellDialog.row?.code ?? '')}
+              </Box>
             </Typography>
-            <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: 13, mt: 0.5 }}>
+            <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: 13, mt: 0.5 }}>
               Bundle: {String(sellDialog.row?.package_name ?? selectedPackage?.name ?? '')}
             </Typography>
-            <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: 13, mt: 0.5 }}>
+            <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: 13, mt: 0.5 }}>
               Price: UGX {Number(selectedPackageMeta?.price_ugx ?? selectedPackageMeta?.price ?? 0).toLocaleString()}
             </Typography>
           </Paper>
@@ -1511,10 +1539,10 @@ export default function AdminVouchers() {
             sx={{
               textTransform: 'none',
               borderRadius: 1.5,
-              borderColor: '#cbd5e1',
-              color: '#0f172a',
-              bgcolor: 'common.white',
-              '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+              borderColor: 'divider',
+              color: 'text.primary',
+              bgcolor: 'background.paper',
+              '&:hover': { borderColor: 'divider', bgcolor: 'background.paper' },
             }}
           >
             Cancel

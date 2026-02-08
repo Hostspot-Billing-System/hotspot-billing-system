@@ -34,12 +34,6 @@ function formatDurationLabelFromMinutes(durationMinutes) {
 	return `${mins} Minutes`;
 }
 
-function formatPriceUGX(value) {
-	const n = Number(value);
-	if (!Number.isFinite(n) || n <= 0) return '';
-	return `${n.toLocaleString()} UGX`;
-}
-
 function Spinner({ className = '' }) {
 	return (
 		<svg

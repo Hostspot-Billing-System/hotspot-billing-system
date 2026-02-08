@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminLogin from './pages/AdminLogin.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import AdminBundles from './pages/AdminBundles';
 import AdminTransactions from './pages/AdminTransactions';
 import AdminWithdraw from './pages/AdminWithdraw';
@@ -12,6 +15,8 @@ import AdminClients from './pages/AdminClients.jsx';
 import MikroTikRouters from './pages/MikroTikRouters.jsx';
 import PortalHome from './portal/PortalHome.jsx';
 import MyProfile from './pages/MyProfile.jsx';
+import { api } from './services/api.js';
+import FullPageLoader from './components/FullPageLoader.jsx';
 
 function getPath() {
   if (typeof window === 'undefined') return '/';
@@ -26,6 +31,8 @@ function navigateTo(path) {
 
 export default function App() {
   const [path, setPath] = useState(getPath());
+  const [auth, setAuth] = useState({ checked: false, isAuthenticated: false });
+  const [overlayLoading, setOverlayLoading] = useState(false);
 
   useEffect(() => {
     function onPop() {
@@ -34,6 +41,42 @@ export default function App() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const isPortal = path === '/portal' || path?.startsWith('/portal/');
+    if (isPortal) return;
+
+    const isPublicAuth = path === '/admin/login' || path === '/forgot-password' || path === '/reset-password';
+
+    async function checkSession() {
+      try {
+        const res = await api.get('/api/auth/me');
+        if (cancelled) return;
+        const isAuthenticated = Boolean(res?.data?.isAuthenticated);
+        setAuth({ checked: true, isAuthenticated });
+
+        if (isAuthenticated && path === '/admin/login') {
+          navigateTo('/admin/dashboard');
+          return;
+        }
+
+        if (!isAuthenticated && !isPublicAuth) {
+          navigateTo('/admin/login');
+        }
+      } catch {
+        if (cancelled) return;
+        setAuth({ checked: true, isAuthenticated: false });
+        if (!isPublicAuth) navigateTo('/admin/login');
+      }
+    }
+
+    checkSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
 
   const sidebarItems = useMemo(
     () => [
@@ -52,6 +95,10 @@ export default function App() {
     if (path === '/portal' || path?.startsWith('/portal/')) {
       return <PortalHome />;
     }
+
+    if (path === '/admin/login') return <AdminLogin />;
+    if (path === '/forgot-password') return <ForgotPassword />;
+    if (path === '/reset-password') return <ResetPassword />;
 
     // Quick Action aliases (logic-only)
     if (path === '/vouchers') return <AdminVouchers />;
@@ -85,15 +132,56 @@ export default function App() {
     return content;
   }
 
+  // While logging out (or any global transition), show loader on its own page.
+  if (overlayLoading) {
+    return <FullPageLoader />;
+  }
+
+  // While checking session, avoid flashing admin chrome.
+  if (!auth.checked) {
+    return null;
+  }
+
+  // If not authenticated, show login without admin chrome.
+  if (!auth.isAuthenticated) {
+    if (path === '/forgot-password') return <ForgotPassword />;
+    if (path === '/reset-password') return <ResetPassword />;
+    return <AdminLogin />;
+  }
+
+  // If authenticated but on login path, App effect will redirect.
+  if (path === '/admin/login') {
+    return <AdminLogin />;
+  }
+
   return (
-    <AdminLayout
-      items={sidebarItems}
-      activePath={path}
-      onNavigate={(item) => {
-        if (item?.path) navigateTo(item.path);
-      }}
-    >
-      {content}
-    </AdminLayout>
+    <>
+      <AdminLayout
+        items={sidebarItems}
+        activePath={path}
+        onNavigate={async (item) => {
+          if (item?.key === 'logout') {
+            setOverlayLoading(true);
+
+            try {
+              await api.post('/api/auth/logout');
+            } catch {
+              // Even if the request fails, force local logout UX.
+            }
+
+            setAuth({ checked: true, isAuthenticated: false });
+            navigateTo('/admin/login');
+
+            // Let the route update paint before hiding.
+            requestAnimationFrame(() => setOverlayLoading(false));
+            return;
+          }
+
+          if (item?.path) navigateTo(item.path);
+        }}
+      >
+        {content}
+      </AdminLayout>
+    </>
   );
 }

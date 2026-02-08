@@ -34,8 +34,19 @@ export function verifyPasswordScrypt(plaintext, stored) {
   if (!raw) return false;
 
   const parts = raw.split('$');
-  if (parts.length !== 7) return false;
-  const [algo, Nraw, rraw, praw, saltB64, hashB64] = parts.slice(1);
+  // Expected format: scrypt$N$r$p$salt$hash
+  // Be tolerant to any previously stored odd formats where an empty segment appears.
+  const algoIndex = parts[0] === 'scrypt' ? 0 : parts[1] === 'scrypt' ? 1 : -1;
+  if (algoIndex < 0) return false;
+  if (parts.length < algoIndex + 6) return false;
+
+  const algo = parts[algoIndex];
+  const Nraw = parts[algoIndex + 1];
+  const rraw = parts[algoIndex + 2];
+  const praw = parts[algoIndex + 3];
+  const saltB64 = parts[algoIndex + 4];
+  const hashB64 = parts[algoIndex + 5];
+
   if (algo !== 'scrypt') return false;
 
   const N = Number(Nraw);

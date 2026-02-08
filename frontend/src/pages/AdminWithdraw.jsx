@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { alpha } from '@mui/material/styles';
 import {
   Alert,
   Box,
@@ -451,7 +452,15 @@ export default function AdminWithdraw() {
         }}
       >
         <Stack spacing={2} sx={{ minWidth: 0 }}>
-          <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e5e7eb', bgcolor: 'common.white' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+            }}
+          >
             <Stack spacing={2} sx={{ p: { xs: 2, sm: 3 } }}>
               <Typography variant="h6" fontWeight={400}>
                 Balance Summary
@@ -485,7 +494,7 @@ export default function AdminWithdraw() {
                 </Stack>
               </Box>
 
-              <Divider sx={{ borderColor: '#eef2f7' }} />
+              <Divider sx={{ borderColor: 'divider' }} />
 
               <Box>
                 <Typography variant="subtitle2" sx={{ color: '#15803d', fontWeight: 900 }}>
@@ -505,8 +514,9 @@ export default function AdminWithdraw() {
             elevation={0}
             sx={{
               borderRadius: 2,
-              border: '1px solid #e5e7eb',
-              bgcolor: 'common.white',
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
               width: '100%',
               maxWidth: '100%',
               minWidth: 0,
@@ -523,20 +533,22 @@ export default function AdminWithdraw() {
                 elevation={0}
                 sx={{
                   borderRadius: 1.5,
-                  border: '1px solid #bae6fd',
-                  bgcolor: '#cffafe',
+                  border: '1px solid',
+                  borderColor: (theme) =>
+                    theme.palette.mode === 'dark' ? alpha(theme.palette.info.main, 0.35) : '#bae6fd',
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.info.main, 0.1) : '#cffafe'),
                   width: '100%',
                   maxWidth: '100%',
                   minWidth: 0,
                 }}
               >
                 <Box sx={{ px: 2, py: 1.25 }}>
-                  <Typography variant="subtitle2" fontWeight={900} sx={{ color: '#0f172a' }}>
+                  <Typography variant="subtitle2" fontWeight={900} sx={{ color: 'text.primary' }}>
                     Withdrawal Charges
                   </Typography>
                 </Box>
 
-                <Divider sx={{ borderColor: 'rgba(15,23,42,0.12)' }} />
+                <Divider sx={{ borderColor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.16) : 'rgba(15,23,42,0.12)') }} />
 
                 <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%', minWidth: 0 }}>
                   <Table
@@ -544,7 +556,11 @@ export default function AdminWithdraw() {
                     sx={{
                       width: '100%',
                       tableLayout: 'fixed',
-                      '& th': { fontWeight: 900, bgcolor: 'rgba(255,255,255,0.55)' },
+                      '& th': {
+                        fontWeight: 900,
+                        bgcolor: (theme) =>
+                          theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.06) : 'rgba(255,255,255,0.55)',
+                      },
                       '& td': { overflowWrap: 'anywhere' },
                     }}
                   >
@@ -621,8 +637,9 @@ export default function AdminWithdraw() {
                     elevation={0}
                     sx={{
                       borderRadius: 1.5,
-                      border: '1px solid #e5e7eb',
-                      bgcolor: 'common.white',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      bgcolor: 'background.paper',
                       p: 2,
                     }}
                   >
@@ -653,7 +670,7 @@ export default function AdminWithdraw() {
                           UGX {formatMoney(previewData?.withdrawal_fee ?? 0, 0)}
                         </Typography>
                       </Stack>
-                      <Divider sx={{ borderColor: '#eef2f7' }} />
+                      <Divider sx={{ borderColor: 'divider' }} />
                       <Stack
                         direction={{ xs: 'column', sm: 'row' }}
                         justifyContent="space-between"
@@ -756,8 +773,9 @@ export default function AdminWithdraw() {
           elevation={0}
           sx={{
             borderRadius: 2,
-            border: '1px solid #e5e7eb',
-            bgcolor: 'common.white',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
             width: '100%',
             maxWidth: '100%',
             minWidth: 0,
@@ -775,7 +793,10 @@ export default function AdminWithdraw() {
               sx={{
                 minWidth: { xs: 720, md: 0 },
                 width: '100%',
-                '& th': { fontWeight: 900, bgcolor: '#f8fafc' },
+                '& th': {
+                  fontWeight: 900,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.04) : '#f8fafc'),
+                },
               }}
             >
               <TableHead>
@@ -869,7 +890,7 @@ export default function AdminWithdraw() {
 
           {total > 0 && !listLoading && !listError ? (
             <>
-              <Divider sx={{ borderColor: '#eef2f7' }} />
+              <Divider sx={{ borderColor: 'divider' }} />
 
               <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>

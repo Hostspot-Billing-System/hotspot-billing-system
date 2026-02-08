@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
+import { alpha } from '@mui/material/styles';
 import {
   Box,
   Button,
@@ -72,17 +73,18 @@ function AccessInfo({ host, username, api_port, winbox_port, web_port, https_por
         mt: 2,
         p: 2,
         borderRadius: 2,
-        border: '1px solid #bae6fd',
-        bgcolor: '#e0f2fe',
+        border: '1px solid',
+        borderColor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.35) : '#bae6fd'),
+        bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.12) : '#e0f2fe'),
       }}
     >
-      <Typography sx={{ fontWeight: 900, fontSize: 13, color: '#0f172a', mb: 0.75 }}>
+      <Typography sx={{ fontWeight: 900, fontSize: 13, color: 'text.primary', mb: 0.75 }}>
         Router Access Information:
       </Typography>
-      <Typography sx={{ fontSize: 12, color: '#0f172a', mb: 1 }}>
+      <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 1 }}>
         Once added, the assigned owner will have access to:
       </Typography>
-      <Box component="ul" sx={{ pl: 2.2, m: 0, color: '#0f172a' }}>
+      <Box component="ul" sx={{ pl: 2.2, m: 0, color: 'text.secondary' }}>
         {items.map((i) => (
           <Box component="li" key={i.label} sx={{ fontSize: 12, mb: 0.4 }}>
             <b>{i.label}:</b> {i.value}
@@ -272,12 +274,13 @@ function AddRouterModal({ open, onClose, onCreated }) {
               mb: 2,
               p: 1.25,
               borderRadius: 1.5,
-              border: '1px solid #fecaca',
-              bgcolor: '#fef2f2',
+              border: '1px solid',
+              borderColor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.error.main, 0.4) : '#fecaca'),
+              bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.error.main, 0.12) : '#fef2f2'),
             }}
           >
-            <Typography sx={{ fontWeight: 900, color: '#991b1b', fontSize: 13 }}>Error</Typography>
-            <Typography sx={{ color: '#991b1b', fontSize: 13 }}>{errors._form}</Typography>
+            <Typography sx={{ fontWeight: 900, color: 'error.main', fontSize: 13 }}>Error</Typography>
+            <Typography sx={{ color: 'error.main', fontSize: 13 }}>{errors._form}</Typography>
           </Box>
         ) : null}
 
@@ -289,7 +292,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
           }}
         >
           <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Router Name *</Typography>
+            <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Router Name *</Typography>
             <TextField
               value={values.name}
               onChange={(e) => setField('name', e.target.value)}
@@ -301,7 +304,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
           </Box>
 
           <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Host/IP Address *</Typography>
+            <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Host/IP Address *</Typography>
             <TextField
               value={values.host}
               onChange={(e) => setField('host', e.target.value)}
@@ -314,7 +317,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
           </Box>
 
           <Box sx={{ gridColumn: { xs: '1 / -1', md: '1 / -1' } }}>
-            <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Description</Typography>
+            <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Description</Typography>
             <TextField
               value={values.description}
               onChange={(e) => setField('description', e.target.value)}
@@ -328,7 +331,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
           </Box>
 
           <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Username *</Typography>
+            <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Username *</Typography>
             <TextField
               value={values.username}
               onChange={(e) => setField('username', e.target.value)}
@@ -340,7 +343,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
           </Box>
 
           <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Password *</Typography>
+            <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Password *</Typography>
             <TextField
               value={values.password}
               onChange={(e) => setField('password', e.target.value)}
@@ -354,11 +357,11 @@ function AddRouterModal({ open, onClose, onCreated }) {
         </Box>
 
         <Box sx={{ mt: 1.5 }}>
-          <Typography sx={{ fontWeight: 900, fontSize: 12, color: '#0f172a', mb: 1 }}>Port Configuration</Typography>
+          <Typography sx={{ fontWeight: 900, fontSize: 12, color: 'text.primary', mb: 1 }}>Port Configuration</Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
             <Box>
-              <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>API Port</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>API Port</Typography>
               <TextField
                 value={values.api_port}
                 onChange={(e) => setField('api_port', e.target.value)}
@@ -370,7 +373,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
             </Box>
 
             <Box>
-              <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Winbox Port</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Winbox Port</Typography>
               <TextField
                 value={values.winbox_port}
                 onChange={(e) => setField('winbox_port', e.target.value)}
@@ -382,7 +385,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
             </Box>
 
             <Box>
-              <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Web Port (HTTP)</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Web Port (HTTP)</Typography>
               <TextField
                 value={values.web_port}
                 onChange={(e) => setField('web_port', e.target.value)}
@@ -394,7 +397,7 @@ function AddRouterModal({ open, onClose, onCreated }) {
             </Box>
 
             <Box>
-              <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>HTTPS Port</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>HTTPS Port</Typography>
               <TextField
                 value={values.https_port}
                 onChange={(e) => setField('https_port', e.target.value)}
@@ -496,19 +499,22 @@ export default function MikroTikRouters() {
     <Box sx={{ width: '100%', pt: { xs: 0.5, sm: 1 }, pb: { xs: 2, sm: 3 }, px: 0 }}>
       <Stack spacing={2.5}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 900, color: '#0f172a' }}>
+          <Typography variant="h5" sx={{ fontWeight: 900, color: 'text.primary' }}>
             MikroTik Management
           </Typography>
-          <Typography sx={{ color: '#64748b', fontSize: 13, mt: 0.5 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.5 }}>
             Add and manage your MikroTik routers for remote access and monitoring
           </Typography>
         </Box>
 
         <Banner />
 
-        <Paper elevation={0} sx={{ p: 2, borderRadius: 2.5, border: '1px solid #e5e7eb', bgcolor: 'common.white' }}>
+        <Paper
+          elevation={0}
+          sx={{ p: 2, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}
+        >
           <Stack spacing={1.25}>
-            <Typography sx={{ fontWeight: 900, color: '#0f172a' }}>Quick Actions</Typography>
+            <Typography sx={{ fontWeight: 900, color: 'text.primary' }}>Quick Actions</Typography>
             <Box>
               <Button variant="contained" onClick={() => setAddOpen(true)} sx={{ textTransform: 'none', fontWeight: 900 }}>
                 + Add Router
@@ -523,23 +529,33 @@ export default function MikroTikRouters() {
             sx={{
               p: 2,
               borderRadius: 2.5,
-              border: '1px solid #fecaca',
-              bgcolor: '#fef2f2',
+              border: '1px solid',
+              borderColor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.error.main, 0.4) : '#fecaca'),
+              bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.error.main, 0.12) : '#fef2f2'),
             }}
           >
-            <Typography sx={{ fontWeight: 900, color: '#991b1b' }}>{error.code}</Typography>
-            <Typography sx={{ color: '#991b1b' }}>{error.message}</Typography>
+            <Typography sx={{ fontWeight: 900, color: 'error.main' }}>{error.code}</Typography>
+            <Typography sx={{ color: 'error.main' }}>{error.message}</Typography>
           </Paper>
         ) : null}
 
-        <Paper elevation={0} sx={{ p: 2, borderRadius: 2.5, border: '1px solid #bae6fd', bgcolor: '#ecfeff' }}>
-          <Typography sx={{ fontSize: 13, color: '#0f172a' }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.35) : '#bae6fd'),
+            bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.1) : '#ecfeff'),
+          }}
+        >
+          <Typography sx={{ fontSize: 13, color: 'text.primary' }}>
             <b>Remote Access Ready!</b> Your routers can now be accessed and controlled from anywhere in the world. No VPN or local network required.
           </Typography>
         </Paper>
 
         <Box>
-          <Typography sx={{ fontWeight: 900, color: '#0f172a', mb: 1 }}>
+          <Typography sx={{ fontWeight: 900, color: 'text.primary', mb: 1 }}>
             Your Routers ({routers.length})
           </Typography>
 
@@ -549,13 +565,14 @@ export default function MikroTikRouters() {
               sx={{
                 p: 6,
                 borderRadius: 2.5,
-                border: '1px solid #e5e7eb',
-                bgcolor: 'common.white',
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
                 textAlign: 'center',
               }}
             >
-              <Typography sx={{ fontWeight: 900, color: '#0f172a', mb: 0.5 }}>No routers configured</Typography>
-              <Typography sx={{ color: '#64748b', fontSize: 13, mb: 2 }}>
+              <Typography sx={{ fontWeight: 900, color: 'text.primary', mb: 0.5 }}>No routers configured</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 13, mb: 2 }}>
                 Add your first MikroTik router to get started
               </Typography>
               <Button variant="contained" onClick={() => setAddOpen(true)} sx={{ textTransform: 'none', fontWeight: 900 }}>
@@ -573,8 +590,9 @@ export default function MikroTikRouters() {
                     sx={{
                       p: 2,
                       borderRadius: 2.5,
-                      border: '1px solid #e5e7eb',
-                      bgcolor: 'common.white',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      bgcolor: 'background.paper',
                     }}
                   >
                     <Box
@@ -586,8 +604,8 @@ export default function MikroTikRouters() {
                       }}
                     >
                       <Box>
-                        <Typography sx={{ fontWeight: 900, color: '#0f172a' }}>{r.name}</Typography>
-                        <Typography sx={{ color: '#64748b', fontSize: 13 }}>{r.host}</Typography>
+                        <Typography sx={{ fontWeight: 900, color: 'text.primary' }}>{r.name}</Typography>
+                        <Typography sx={{ color: 'text.secondary', fontSize: 13 }}>{r.host}</Typography>
                       </Box>
 
                       <Box>
@@ -599,8 +617,8 @@ export default function MikroTikRouters() {
                       </Box>
 
                       <Box>
-                        <Typography sx={{ fontSize: 12, color: '#64748b' }}>Last checked</Typography>
-                        <Typography sx={{ fontSize: 13, color: '#0f172a', fontWeight: 800 }}>
+                        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Last checked</Typography>
+                        <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 800 }}>
                           {r.last_checked ? dayjs(r.last_checked).format('YYYY-MM-DD HH:mm') : '—'}
                         </Typography>
                       </Box>

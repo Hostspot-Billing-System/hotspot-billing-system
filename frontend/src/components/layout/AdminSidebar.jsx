@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import styles from './AdminSidebar.module.css';
 import { ADMIN_SIDEBAR_MENU } from './adminSidebarMenu';
+import { useColorMode } from '../../theme/colorMode.js';
 
 function SvgIcon({ name, className }) {
   const common = {
@@ -284,6 +285,7 @@ function AdminSidebar({
   title = 'Hotspot System',
   variant = 'fixed',
 }) {
+  const { mode, toggleDarkMode } = useColorMode();
   const resolvedActiveKey = resolveActiveKey({ activeKey, activePath });
   const isDrawer = variant === 'drawer';
 
@@ -317,6 +319,22 @@ function AdminSidebar({
             onNavigate={onNavigate}
           />
         ))}
+
+        <div className={styles.sectionDivider} aria-hidden="true" />
+        <button
+          type="button"
+          className={styles.item}
+          onClick={() => toggleDarkMode()}
+          aria-label="Toggle dark mode"
+        >
+          <span className={styles.iconWrap} aria-hidden="true">
+            <SvgIcon name="magic" className={styles.icon} />
+          </span>
+          <span className={styles.label}>Dark mode</span>
+          <span className={styles.toggleValue} aria-hidden="true">
+            {mode === 'dark' ? 'On' : 'Off'}
+          </span>
+        </button>
       </nav>
     </aside>
   );

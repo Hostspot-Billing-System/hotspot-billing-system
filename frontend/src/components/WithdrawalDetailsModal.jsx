@@ -17,7 +17,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
 import { fetchWithdrawalDetails } from '../api/withdrawals';
@@ -197,7 +197,10 @@ export default function WithdrawalDetailsModal({ open, withdrawalId, onClose }) 
                 size="small"
                 sx={{
                   minWidth: { xs: 820, md: 0 },
-                  '& th': { bgcolor: '#f8fafc', fontWeight: 900 },
+                  '& th': {
+                    bgcolor: (t) => (t.palette.mode === 'dark' ? alpha(t.palette.common.white, 0.04) : '#f8fafc'),
+                    fontWeight: 900,
+                  },
                   '& td': { py: 1 },
                 }}
               >
@@ -225,7 +228,7 @@ export default function WithdrawalDetailsModal({ open, withdrawalId, onClose }) 
                     transactions.map((t) => (
                       <TableRow key={t.id} hover>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(t.created_at)}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 900 }}>
+                        <TableCell sx={{ fontFamily: 'monospace', color: 'primary.main', fontWeight: 900 }}>
                           {t.reference}
                         </TableCell>
                         <TableCell sx={{ fontFamily: 'monospace' }}>{t.customer_phone ?? '—'}</TableCell>

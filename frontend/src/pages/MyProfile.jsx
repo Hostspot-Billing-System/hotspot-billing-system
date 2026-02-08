@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   Alert,
   Box,
@@ -99,7 +100,7 @@ function EyeIcon({ off }) {
 }
 
 function SectionIcon({ name }) {
-  const common = { fontSize: 'small', sx: { color: '#0f172a' } };
+  const common = { fontSize: 'small', sx: { color: 'text.secondary' } };
   if (name === 'edit') {
     return (
       <SvgIcon {...common} viewBox="0 0 24 24">
@@ -157,8 +158,8 @@ function SectionIcon({ name }) {
 function CardTitle({ icon, title }) {
   return (
     <Stack direction="row" spacing={1} alignItems="center">
-      <Box sx={{ width: 18, height: 18, display: 'grid', placeItems: 'center', color: '#0f172a' }}>{icon}</Box>
-      <Typography sx={{ fontWeight: 900, color: '#0f172a' }}>{title}</Typography>
+      <Box sx={{ width: 18, height: 18, display: 'grid', placeItems: 'center', color: 'text.secondary' }}>{icon}</Box>
+      <Typography sx={{ fontWeight: 900, color: 'text.primary' }}>{title}</Typography>
     </Stack>
   );
 }
@@ -166,8 +167,8 @@ function CardTitle({ icon, title }) {
 function InfoRow({ label, value, right }) {
   return (
     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.75 }}>
-      <Typography sx={{ fontSize: 13, color: '#475569', fontWeight: 700 }}>{label}</Typography>
-      {right ?? <Typography sx={{ fontSize: 13, color: '#0f172a', fontWeight: 800 }}>{value ?? '—'}</Typography>}
+      <Typography sx={{ fontSize: 13, color: 'text.secondary', fontWeight: 700 }}>{label}</Typography>
+      {right ?? <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 800 }}>{value ?? '—'}</Typography>}
     </Stack>
   );
 }
@@ -199,6 +200,8 @@ function useDefaultSmsForm() {
 }
 
 export default function MyProfile() {
+  const theme = useTheme();
+
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -218,7 +221,7 @@ export default function MyProfile() {
 
   const [sms, setSms] = useState(useDefaultSmsForm());
 
-  const [pw, setPw] = useState({ current_password: '', new_password: '', confirm_new_password: '' });
+  const [pw, setPw] = useState({ new_username: '', current_password: '', new_password: '', confirm_new_password: '' });
   const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false, sms: false });
 
   useEffect(() => {
@@ -313,15 +316,15 @@ export default function MyProfile() {
       <Chip
         size="small"
         label={account.account_expires_at ? `Expires ${d}` : 'No expiry'}
-        sx={{
+        sx={(t) => ({
           fontWeight: 800,
-          bgcolor: '#e2e8f0',
-          color: '#0f172a',
+          bgcolor: t.palette.mode === 'dark' ? alpha(t.palette.common.white, 0.08) : '#e2e8f0',
+          color: t.palette.text.primary,
           height: 22,
-        }}
+        })}
       />
     );
-  }, [account.account_expires_at]);
+  }, [account.account_expires_at, theme.palette.mode]);
 
   async function onSaveProfile() {
     setSavingProfile(true);
@@ -419,11 +422,16 @@ export default function MyProfile() {
     setSavingPassword(true);
     try {
       await changeMyPassword({
+        new_username: String(pw.new_username ?? '').trim() || undefined,
         current_password: String(pw.current_password ?? ''),
         new_password: String(pw.new_password ?? ''),
         confirm_new_password: String(pw.confirm_new_password ?? ''),
       });
-      setPw({ current_password: '', new_password: '', confirm_new_password: '' });
+      const nextUsername = String(pw.new_username ?? '').trim();
+      if (nextUsername) {
+        setProfile((prev) => ({ ...prev, username: nextUsername }));
+      }
+      setPw({ new_username: '', current_password: '', new_password: '', confirm_new_password: '' });
       setSnack({ open: true, message: 'Password changed', severity: 'success' });
     } catch (e) {
       const msg = e?.response?.data?.error?.message ?? e?.message ?? 'Failed to change password';
@@ -434,19 +442,32 @@ export default function MyProfile() {
   }
 
   const smsCustomStatus = useMemo(() => {
-    if (!sms.use_custom_api) return { label: 'Status: Inactive - Using System Default', color: '#e2e8f0', text: '#0f172a' };
-    return { label: 'Status: Active - Using Your Custom API', color: '#d1fae5', text: '#065f46' };
-  }, [sms.use_custom_api]);
+    if (!sms.use_custom_api) {
+      return {
+        label: 'Status: Inactive - Using System Default',
+        bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.06) : '#e2e8f0',
+        text: theme.palette.text.primary,
+        borderColor: theme.palette.divider,
+      };
+    }
+
+    return {
+      label: 'Status: Active - Using Your Custom API',
+      bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.success.main, 0.12) : '#d1fae5',
+      text: theme.palette.text.primary,
+      borderColor: theme.palette.mode === 'dark' ? alpha(theme.palette.success.main, 0.35) : '#bbf7d0',
+    };
+  }, [sms.use_custom_api, theme.palette.common.white, theme.palette.divider, theme.palette.mode, theme.palette.success.main, theme.palette.text.primary]);
 
   return (
     <Box sx={{ width: '100%' }}>
       <Stack spacing={2}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
           <Box>
-            <Typography variant="h5" fontWeight={900} sx={{ color: '#0f172a' }}>
+            <Typography variant="h5" fontWeight={900} sx={{ color: 'text.primary' }}>
               My Profile
             </Typography>
-            <Typography variant="body2" sx={{ color: '#64748b', mt: 0.25 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
               Manage your profile information and security settings
             </Typography>
           </Box>
@@ -484,11 +505,11 @@ export default function MyProfile() {
                     }}
                   >
                     <Box>
-                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Username</Typography>
-                      <TextField value={profile.username} disabled size="small" fullWidth helperText="Username cannot be changed" />
+                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Username</Typography>
+                        <TextField value={profile.username} disabled size="small" fullWidth helperText="Change username in the Change Password section" />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Email Address</Typography>
+                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Email Address</Typography>
                       <TextField
                         value={profile.email}
                         onChange={(e) => setProfile((s) => ({ ...s, email: e.target.value }))}
@@ -498,7 +519,7 @@ export default function MyProfile() {
                       />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Phone Number</Typography>
+                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Phone Number</Typography>
                       <TextField
                         value={profile.phone_number}
                         onChange={(e) => setProfile((s) => ({ ...s, phone_number: e.target.value }))}
@@ -508,7 +529,7 @@ export default function MyProfile() {
                       />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Business Name</Typography>
+                      <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Business Name</Typography>
                       <TextField
                         value={profile.business_name}
                         onChange={(e) => setProfile((s) => ({ ...s, business_name: e.target.value }))}
@@ -520,7 +541,7 @@ export default function MyProfile() {
                   </Box>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Business Address</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Business Address</Typography>
                     <TextField
                       value={profile.business_address}
                       onChange={(e) => setProfile((s) => ({ ...s, business_address: e.target.value }))}
@@ -553,15 +574,15 @@ export default function MyProfile() {
                     icon={<SectionIcon name="sms" />}
                     title="SMS Notification Preferences"
                   />
-                  <Typography variant="body2" sx={{ color: '#64748b' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     Control when you receive SMS notifications. When disabled, you'll only receive OTPs via email.
                   </Typography>
 
-                  <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
                     <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Box>
-                        <Typography sx={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>Login OTP via SMS</Typography>
-                        <Typography sx={{ fontSize: 12, color: '#64748b' }}>Receive OTP codes via SMS when logging in</Typography>
+                        <Typography sx={{ fontSize: 13, fontWeight: 900, color: 'text.primary' }}>Login OTP via SMS</Typography>
+                        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Receive OTP codes via SMS when logging in</Typography>
                       </Box>
                       <Switch
                         checked={Boolean(sms.login_otp_enabled)}
@@ -572,8 +593,8 @@ export default function MyProfile() {
                     <Divider />
                     <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Box>
-                        <Typography sx={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>Withdrawal OTP via SMS</Typography>
-                        <Typography sx={{ fontSize: 12, color: '#64748b' }}>Receive OTP codes via SMS when withdrawing funds</Typography>
+                        <Typography sx={{ fontSize: 13, fontWeight: 900, color: 'text.primary' }}>Withdrawal OTP via SMS</Typography>
+                        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Receive OTP codes via SMS when withdrawing funds</Typography>
                       </Box>
                       <Switch
                         checked={Boolean(sms.withdrawal_otp_enabled)}
@@ -594,8 +615,8 @@ export default function MyProfile() {
                       }}
                     >
                       <Box>
-                        <Typography sx={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>Customer Voucher SMS</Typography>
-                        <Typography sx={{ fontSize: 12, color: '#64748b' }}>Send voucher credentials via SMS to customers after purchase</Typography>
+                        <Typography sx={{ fontSize: 13, fontWeight: 900, color: 'text.primary' }}>Customer Voucher SMS</Typography>
+                        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Send voucher credentials via SMS to customers after purchase</Typography>
                       </Box>
                       <Switch
                         checked={Boolean(sms.customer_voucher_sms_enabled)}
@@ -605,13 +626,29 @@ export default function MyProfile() {
                     </Box>
 
                     <Box sx={{ px: 1.5, pb: 1.5 }}>
-                      <Alert severity="warning" sx={{ bgcolor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                      <Alert
+                        severity="warning"
+                        sx={(t) => ({
+                          bgcolor: t.palette.mode === 'dark' ? alpha(t.palette.warning.main, 0.14) : '#fef3c7',
+                          color: t.palette.text.primary,
+                          border: '1px solid',
+                          borderColor: t.palette.mode === 'dark' ? alpha(t.palette.warning.main, 0.35) : '#fde68a',
+                        })}
+                      >
                         <b>Important:</b> Disabling this means customers will NOT receive voucher SMS. They must rely on email only.
                       </Alert>
                     </Box>
                   </Box>
 
-                  <Alert severity="info" sx={{ bgcolor: '#e0f2fe', border: '1px solid #bae6fd', color: '#075985' }}>
+                  <Alert
+                    severity="info"
+                    sx={(t) => ({
+                      bgcolor: t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.14) : '#e0f2fe',
+                      border: '1px solid',
+                      borderColor: t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.35) : '#bae6fd',
+                      color: t.palette.text.primary,
+                    })}
+                  >
                     <b>Note:</b> You will always receive OTP codes via email. Customer voucher SMS settings control whether customers receive voucher credentials via SMS.
                   </Alert>
 
@@ -640,11 +677,19 @@ export default function MyProfile() {
                       sx={{ bgcolor: '#16a34a', color: 'white', fontWeight: 900, height: 22 }}
                     />
                   </Stack>
-                  <Typography variant="body2" sx={{ color: '#64748b' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     Configure your own SMS API credentials. Choose between Pandora Networks or UGSMS. When active, the system will use your API instead of the default.
                   </Typography>
 
-                  <Alert severity="info" sx={{ bgcolor: '#e0f2fe', border: '1px solid #bae6fd', color: '#075985' }}>
+                  <Alert
+                    severity="info"
+                    sx={(t) => ({
+                      bgcolor: t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.14) : '#e0f2fe',
+                      border: '1px solid',
+                      borderColor: t.palette.mode === 'dark' ? alpha(t.palette.info.main, 0.35) : '#bae6fd',
+                      color: t.palette.text.primary,
+                    })}
+                  >
                     <b>Need API credentials?</b>
                     <br />
                     <b>Pandora Networks:</b> Contact at <b>sms.thepandoranetworks.com</b> to get your API credentials.
@@ -655,8 +700,9 @@ export default function MyProfile() {
                   <Alert
                     severity="success"
                     sx={{
-                      bgcolor: smsCustomStatus.color,
-                      border: '1px solid #bbf7d0',
+                      bgcolor: smsCustomStatus.bgcolor,
+                      border: '1px solid',
+                      borderColor: smsCustomStatus.borderColor,
                       color: smsCustomStatus.text,
                     }}
                   >
@@ -666,7 +712,7 @@ export default function MyProfile() {
                   </Alert>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>SMS Provider</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>SMS Provider</Typography>
                     <FormControl size="small" fullWidth>
                       <Select
                         value="UGSMS"
@@ -676,11 +722,11 @@ export default function MyProfile() {
                         <MenuItem value="UGSMS">UGSMS</MenuItem>
                       </Select>
                     </FormControl>
-                    <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.5 }}>Select your SMS provider</Typography>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>Select your SMS provider</Typography>
                   </Box>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>SMS API Username</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>SMS API Username</Typography>
                     <TextField
                       value={sms.api_username}
                       onChange={(e) => setSms((s) => ({ ...s, api_username: e.target.value }))}
@@ -691,7 +737,7 @@ export default function MyProfile() {
                   </Box>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>SMS API Password</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>SMS API Password</Typography>
                     <TextField
                       value={sms.api_password}
                       onChange={(e) => setSms((s) => ({ ...s, api_password: e.target.value }))}
@@ -710,11 +756,11 @@ export default function MyProfile() {
                         ),
                       }}
                     />
-                    <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.5 }}>Leave blank to keep current password</Typography>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>Leave blank to keep current password</Typography>
                   </Box>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Sender ID</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Sender ID</Typography>
                     <TextField
                       value={sms.sender_id}
                       onChange={(e) => setSms((s) => ({ ...s, sender_id: e.target.value }))}
@@ -722,7 +768,7 @@ export default function MyProfile() {
                       fullWidth
                       disabled={loading || savingSmsApi}
                     />
-                    <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.5 }}>Maximum 11 characters, will appear as SMS sender</Typography>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>Maximum 11 characters, will appear as SMS sender</Typography>
                   </Box>
 
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -740,8 +786,8 @@ export default function MyProfile() {
 
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
                     <Box>
-                      <Typography sx={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>Use Custom SMS API</Typography>
-                      <Typography sx={{ fontSize: 12, color: '#64748b' }}>Activate to use your API, deactivate to use system default</Typography>
+                      <Typography sx={{ fontSize: 13, fontWeight: 900, color: 'text.primary' }}>Use Custom SMS API</Typography>
+                      <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Activate to use your API, deactivate to use system default</Typography>
                     </Box>
                     <Switch
                       checked={Boolean(sms.use_custom_api)}
@@ -750,16 +796,24 @@ export default function MyProfile() {
                     />
                   </Stack>
 
-                  <Stack spacing={0.25} sx={{ color: '#64748b', fontSize: 12 }}>
-                    <Typography sx={{ fontSize: 12, color: '#64748b' }}>
+                  <Stack spacing={0.25} sx={{ color: 'text.secondary', fontSize: 12 }}>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
                       Last used: {fmtDateTimeShort(sms.last_used_at)}
                     </Typography>
-                    <Typography sx={{ fontSize: 12, color: '#64748b' }}>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
                       Configured: {fmtDateTimeShort(sms.updated_at)}
                     </Typography>
                   </Stack>
 
-                  <Alert severity="info" sx={{ bgcolor: '#f8fafc', border: '1px solid #e2e8f0', color: '#0f172a' }}>
+                  <Alert
+                    severity="info"
+                    sx={(t) => ({
+                      bgcolor: t.palette.mode === 'dark' ? alpha(t.palette.common.white, 0.04) : '#f8fafc',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      color: t.palette.text.primary,
+                    })}
+                  >
                     <b>Need API credentials?</b>
                     <br />
                     Contact Pandora Networks at <b>sms.thepandoranetworks.com</b> to get your API credentials.
@@ -777,7 +831,19 @@ export default function MyProfile() {
                   <CardTitle icon={<SectionIcon name="lock" />} title="Change Password" />
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Current Password</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>New Username (optional)</Typography>
+                    <TextField
+                      value={pw.new_username}
+                      onChange={(e) => setPw((s) => ({ ...s, new_username: e.target.value }))}
+                      size="small"
+                      fullWidth
+                      disabled={loading || savingPassword}
+                      helperText="Leave blank to keep current username"
+                    />
+                  </Box>
+
+                  <Box>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Current Password</Typography>
                     <TextField
                       value={pw.current_password}
                       onChange={(e) => setPw((s) => ({ ...s, current_password: e.target.value }))}
@@ -798,7 +864,7 @@ export default function MyProfile() {
                   </Box>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>New Password</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>New Password</Typography>
                     <TextField
                       value={pw.new_password}
                       onChange={(e) => setPw((s) => ({ ...s, new_password: e.target.value }))}
@@ -820,7 +886,7 @@ export default function MyProfile() {
                   </Box>
 
                   <Box>
-                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: '#0f172a', mb: 0.75 }}>Confirm New Password</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 900, color: 'text.primary', mb: 0.75 }}>Confirm New Password</Typography>
                     <TextField
                       value={pw.confirm_new_password}
                       onChange={(e) => setPw((s) => ({ ...s, confirm_new_password: e.target.value }))}

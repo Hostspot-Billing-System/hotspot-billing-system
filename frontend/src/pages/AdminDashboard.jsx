@@ -441,14 +441,17 @@ export default function AdminDashboard() {
                   justifyContent: 'center',
                   textTransform: 'none',
                   fontWeight: 800,
+                  color: 'common.white',
                   py: 1.35,
                   minHeight: 44,
                   borderRadius: 2,
                   bgcolor: action.color,
                   boxShadow: '0 6px 14px rgba(0,0,0,0.18)',
+                  '& .MuiSvgIcon-root': { color: 'common.white' },
                   '&:hover': {
                     bgcolor: action.color,
                     filter: 'brightness(0.92)',
+                    color: 'common.white',
                   },
                 }}
               >

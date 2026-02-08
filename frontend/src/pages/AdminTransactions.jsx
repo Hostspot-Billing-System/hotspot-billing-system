@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { alpha } from '@mui/material/styles';
 import {
   Box,
   Button,
@@ -229,8 +230,9 @@ export default function AdminTransactions() {
         sx={{
           mt: 3,
           borderRadius: 2,
-          border: '1px solid #e5e7eb',
-          bgcolor: 'common.white',
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
           overflow: 'hidden',
         }}
       >
@@ -242,11 +244,14 @@ export default function AdminTransactions() {
             alignItems: 'center',
             gap: 1,
             flexWrap: 'wrap',
-            bgcolor: '#f8fafc',
-            borderBottom: '1px solid #e5e7eb',
+            bgcolor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.04) : '#f8fafc'),
+            borderBottom: '1px solid',
+            borderColor: 'divider',
           }}
         >
-          <Icon path={ICONS.filter} size={16} color="#0f172a" />
+          <Box sx={{ color: 'text.secondary' }}>
+            <Icon path={ICONS.filter} size={16} color="currentColor" />
+          </Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>
             Search & Filter Transactions
           </Typography>
@@ -269,11 +274,11 @@ export default function AdminTransactions() {
             sx={{
               textTransform: 'none',
               borderRadius: 1,
-              borderColor: '#cbd5e1',
-              color: '#334155',
-              bgcolor: 'common.white',
+              borderColor: 'divider',
+              color: 'text.primary',
+              bgcolor: 'background.paper',
               minHeight: 44,
-              '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+              '&:hover': { borderColor: 'divider', bgcolor: 'background.paper' },
             }}
           >
             Reset
@@ -302,14 +307,16 @@ export default function AdminTransactions() {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start" sx={{ ml: 0.5 }}>
-                    <Icon path={ICONS.search} size={16} color="#64748b" />
+                    <Box sx={{ color: 'text.secondary' }}>
+                      <Icon path={ICONS.search} size={16} color="currentColor" />
+                    </Box>
                   </InputAdornment>
                 ),
               }}
-              sx={{ bgcolor: 'common.white' }}
+              sx={{ bgcolor: 'background.paper' }}
             />
 
-            <FormControl size="small" sx={{ bgcolor: 'common.white' }}>
+            <FormControl size="small" sx={{ bgcolor: 'background.paper' }}>
               <InputLabel id="tx-status">Status</InputLabel>
               <Select
                 labelId="tx-status"
@@ -327,7 +334,7 @@ export default function AdminTransactions() {
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ bgcolor: 'common.white' }}>
+            <FormControl size="small" sx={{ bgcolor: 'background.paper' }}>
               <InputLabel id="tx-bundle">Bundle</InputLabel>
               <Select
                 labelId="tx-bundle"
@@ -488,16 +495,22 @@ export default function AdminTransactions() {
                 borderRadius: 1,
                 borderColor: '#86efac',
                 color: '#15803d',
-                bgcolor: 'common.white',
+                bgcolor: 'background.paper',
                 minHeight: 44,
-                '&:hover': { borderColor: '#4ade80', bgcolor: 'common.white' },
+                '&:hover': { borderColor: '#4ade80', bgcolor: 'background.paper' },
               }}
             >
               Export CSV
               <Chip
                 size="small"
                 label={total.toLocaleString()}
-                sx={{ ml: 1, height: 20, fontWeight: 900, bgcolor: '#e2e8f0', color: '#0f172a' }}
+                sx={(theme) => ({
+                  ml: 1,
+                  height: 20,
+                  fontWeight: 900,
+                  bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.08) : '#e2e8f0',
+                  color: theme.palette.text.primary,
+                })}
               />
             </Button>
           </Box>
@@ -509,8 +522,9 @@ export default function AdminTransactions() {
         sx={{
           mt: 3,
           borderRadius: 2,
-          border: '1px solid #e5e7eb',
-          bgcolor: 'common.white',
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
           overflow: 'hidden',
         }}
       >
@@ -519,7 +533,10 @@ export default function AdminTransactions() {
             size="small"
             sx={{
               minWidth: { xs: 980, lg: 0 },
-              '& th': { bgcolor: '#f8fafc', fontWeight: 900 },
+              '& th': {
+                bgcolor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.04) : '#f8fafc'),
+                fontWeight: 900,
+              },
               '& td': { py: 1 },
             }}
           >
@@ -598,13 +615,13 @@ export default function AdminTransactions() {
                             minHeight: 44,
                           px: 0,
                           borderRadius: 1,
-                          borderColor: '#cbd5e1',
-                          color: '#0f172a',
-                          bgcolor: 'common.white',
-                          '&:hover': { borderColor: '#94a3b8', bgcolor: 'common.white' },
+                          borderColor: 'divider',
+                          color: 'text.primary',
+                          bgcolor: 'background.paper',
+                          '&:hover': { borderColor: 'divider', bgcolor: 'background.paper' },
                         }}
                       >
-                        <Icon path={ICONS.copy} size={14} color="#0f172a" />
+                        <Icon path={ICONS.copy} size={14} color="currentColor" />
                       </Button>
                     </Stack>
                   </TableCell>
@@ -630,8 +647,8 @@ export default function AdminTransactions() {
                         borderRadius: 1,
                         borderColor: '#93c5fd',
                         color: '#2563eb',
-                        bgcolor: 'common.white',
-                        '&:hover': { borderColor: '#60a5fa', bgcolor: 'common.white' },
+                        bgcolor: 'background.paper',
+                        '&:hover': { borderColor: '#60a5fa', bgcolor: 'background.paper' },
                       }}
                     >
                       <Icon path={ICONS.eye} size={16} color="#2563eb" />
@@ -646,7 +663,7 @@ export default function AdminTransactions() {
 
         {total > 0 && !loading && !error ? (
           <>
-            <Divider sx={{ borderColor: '#eef2f7' }} />
+            <Divider sx={{ borderColor: 'divider' }} />
 
             <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
               <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700 }}>

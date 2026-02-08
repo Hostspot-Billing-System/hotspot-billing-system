@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
+import { alpha } from '@mui/material/styles';
 import {
   Alert,
   Box,
@@ -45,8 +46,9 @@ function StatCard({ title, value, footer, accent }) {
       sx={{
         p: 2.5,
         borderRadius: 2.5,
-        border: '1px solid #e5e7eb',
-        bgcolor: 'common.white',
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -62,8 +64,8 @@ function StatCard({ title, value, footer, accent }) {
         }}
       />
       <Typography sx={{ fontSize: 12, fontWeight: 900, color: accent, textTransform: 'uppercase' }}>{title}</Typography>
-      <Typography sx={{ mt: 1, fontSize: 26, fontWeight: 900, color: '#0f172a' }}>{value}</Typography>
-      {footer ? <Typography sx={{ mt: 1, fontSize: 13, color: '#475569' }}>{footer}</Typography> : null}
+      <Typography sx={{ mt: 1, fontSize: 26, fontWeight: 900, color: 'text.primary' }}>{value}</Typography>
+      {footer ? <Typography sx={{ mt: 1, fontSize: 13, color: 'text.secondary' }}>{footer}</Typography> : null}
     </Paper>
   );
 }
@@ -119,10 +121,10 @@ export default function AdminClients() {
     <Box sx={{ width: '100%', pt: { xs: 0.5, sm: 1 }, pb: { xs: 2, sm: 3 }, px: 0 }}>
       <Stack spacing={2.5}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 900, color: '#0f172a' }}>
+          <Typography variant="h5" sx={{ fontWeight: 900, color: 'text.primary' }}>
             Clients Overview
           </Typography>
-          <Typography sx={{ color: '#64748b', fontSize: 13, mt: 0.5 }}>{appliedRangeLabel}</Typography>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.5 }}>{appliedRangeLabel}</Typography>
         </Box>
 
         {/* Date Filter */}
@@ -131,8 +133,9 @@ export default function AdminClients() {
           sx={{
             p: { xs: 2, sm: 2.5 },
             borderRadius: 2.5,
-            border: '1px solid #e5e7eb',
-            bgcolor: 'common.white',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
           }}
         >
           <Box
@@ -152,7 +155,7 @@ export default function AdminClients() {
                 value={startDate}
                 onChange={(v) => setStartDate(v ?? null)}
                 slotProps={{
-                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'common.white' } },
+                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'background.paper' } },
                 }}
               />
               <DatePicker
@@ -160,7 +163,7 @@ export default function AdminClients() {
                 value={endDate}
                 onChange={(v) => setEndDate(v ?? null)}
                 slotProps={{
-                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'common.white' } },
+                  textField: { size: 'small', placeholder: 'mm/dd/yyyy', sx: { bgcolor: 'background.paper' } },
                 }}
               />
             </LocalizationProvider>
@@ -229,29 +232,39 @@ export default function AdminClients() {
           elevation={0}
           sx={{
             borderRadius: 2.5,
-            border: '1px solid #e5e7eb',
-            bgcolor: 'common.white',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
             overflow: 'hidden',
           }}
         >
           <TableContainer sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <Table size="small" sx={{ minWidth: 980 }}>
+            <Table
+              size="small"
+              sx={{
+                minWidth: 980,
+                '& th': {
+                  fontWeight: 900,
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.04) : '#f8fafc'),
+                },
+              }}
+            >
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 900 }}>CUSTOMER PHONE</TableCell>
-                  <TableCell sx={{ fontWeight: 900 }} align="center">
+                  <TableCell>CUSTOMER PHONE</TableCell>
+                  <TableCell align="center">
                     TOTAL PURCHASES
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 900 }} align="right">
+                  <TableCell align="right">
                     TOTAL SPENT
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 900 }} align="center">
+                  <TableCell align="center">
                     LAST PURCHASE
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 900 }} align="center">
+                  <TableCell align="center">
                     VISIT DAYS
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 900 }}>PURCHASED BUNDLES</TableCell>
+                  <TableCell>PURCHASED BUNDLES</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -281,7 +294,7 @@ export default function AdminClients() {
                           sx={{ bgcolor: '#16a34a', color: 'white', fontWeight: 900 }}
                         />
                       </TableCell>
-                      <TableCell sx={{ color: '#64748b' }}>
+                      <TableCell sx={{ color: 'text.secondary' }}>
                         {(row.purchased_bundles ?? []).join(', ')}
                       </TableCell>
                     </TableRow>

@@ -49,6 +49,14 @@ function formatUGX(value) {
   return `${n.toLocaleString()} UGX`;
 }
 
+const NEUTRAL_CHIP_SX = {
+  bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#444444' : theme.palette.grey[100]),
+  border: 1,
+  borderColor: 'divider',
+  color: (theme) => (theme.palette.mode === 'dark' ? theme.palette.common.white : theme.palette.text.primary),
+  fontWeight: 900,
+};
+
 export default function AdminBundles() {
   // Always use card layout to avoid table clipping/hidden actions on mid-size laptops.
   // (The right panel is narrower due to the admin sidebar and left form column.)
@@ -382,8 +390,7 @@ export default function AdminBundles() {
               label={loading ? 'Loading…' : bundlesFoundLabel}
               size="small"
               sx={{
-                bgcolor: '#0ea5e9',
-                color: 'white',
+                ...NEUTRAL_CHIP_SX,
                 fontWeight: 800,
               }}
             />
@@ -527,9 +534,19 @@ export default function AdminBundles() {
                             label={isDeleted ? 'Deleted' : isActive ? 'Active' : 'Disabled'}
                             size="small"
                             sx={{
-                              bgcolor: isDeleted ? '#ef4444' : isActive ? '#16a34a' : '#64748b',
-                              color: 'white',
-                              fontWeight: 900,
+                              ...NEUTRAL_CHIP_SX,
+                              bgcolor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? '#444444'
+                                  : isDeleted
+                                    ? theme.palette.grey[200]
+                                    : theme.palette.grey[100],
+                              color: (theme) =>
+                                !isDeleted && isActive
+                                  ? theme.palette.success.main
+                                  : theme.palette.mode === 'dark'
+                                    ? theme.palette.common.white
+                                    : theme.palette.text.primary,
                               flexShrink: 0,
                             }}
                           />
@@ -539,17 +556,17 @@ export default function AdminBundles() {
                           <Chip
                             label={formatDurationBadge(r.duration_minutes)}
                             size="small"
-                            sx={{ bgcolor: '#06b6d4', color: 'white', fontWeight: 900 }}
+                            sx={NEUTRAL_CHIP_SX}
                           />
                           <Chip
                             label={formatUGX(r.price_ugx)}
                             size="small"
-                            sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 900 }}
+                            sx={NEUTRAL_CHIP_SX}
                           />
                           <Chip
                             label={`Vouchers ${vouchersLabel}`}
                             size="small"
-                            sx={{ bgcolor: '#2563eb', color: 'white', fontWeight: 900 }}
+                            sx={NEUTRAL_CHIP_SX}
                           />
                         </Stack>
 
