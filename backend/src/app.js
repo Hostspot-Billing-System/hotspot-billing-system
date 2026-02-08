@@ -28,17 +28,38 @@ import requireAuth from './middleware/requireAuth.js';
 
 const app = express();
 
+// PRODUCTION NOTE:
+// Railway/Vercel sit behind proxies and terminate TLS. Trusting the proxy enables
+// accurate req.secure and allows `secure` cookies to be set correctly.
+if (env.APP_ENV === 'production') {
+   app.set('trust proxy', 1);
+}
+
 /* =========================
    CORS CONFIG
 ========================= */
-// ⚠️ STABLE CORE — DO NOT MODIFY WITHOUT FULL TEST
-const allowedOrigins = [
-   'http://localhost:5173',
-   'http://localhost:5174',
-   'http://127.0.0.1:5173',
-   'http://127.0.0.1:5174',
-   /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
-];
+// CORS origins:
+// - Local dev origins are always allowed.
+// - Production should explicitly allow the deployed frontend domain.
+//   Configure with `FRONTEND_ORIGINS` (comma-separated), e.g.
+//   FRONTEND_ORIGINS=https://yourapp.vercel.app,https://www.yourdomain.com
+const allowedOrigins = (() => {
+   const origins = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5174',
+      /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
+   ];
+
+   const extra = String(process.env.FRONTEND_ORIGINS ?? '')
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
+   origins.push(...extra);
+
+   return origins;
+})();
 
 app.use(
    cors({
@@ -51,10 +72,10 @@ app.use(
          );
 
          if (!allowed) {
-            // Never crash due to CORS.
+            // Never crash the server due to CORS, but do not grant CORS headers.
             // eslint-disable-next-line no-console
             console.warn('[CORS] Blocked origin:', origin);
-            return callback(null, true);
+            return callback(null, false);
          }
 
          return callback(null, true);
@@ -76,9 +97,14 @@ app.use(
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
+      // PRODUCTION NOTE:
+      // Enables secure cookies when running behind a proxy (Railway/Vercel).
+      proxy: env.APP_ENV === 'production',
       cookie: {
          httpOnly: true,
-         sameSite: 'lax',
+         // Required for cross-site cookies (Vercel frontend -> Railway backend).
+         // Safe for same-site too; keeps auth stable across environments.
+         sameSite: env.APP_ENV === 'production' ? 'none' : 'lax',
          secure: env.APP_ENV === 'production',
          maxAge: 7 * 24 * 60 * 60 * 1000,
       },

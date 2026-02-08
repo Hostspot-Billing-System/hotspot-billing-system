@@ -24,12 +24,17 @@ function shouldIgnoreLocalhostBaseUrl(candidate) {
 // When running the portal UI from another device, a localhost base URL would point to *that device*;
 // in that case we ignore it and use same-origin so the proxy can still work.
 const envBaseURL = import.meta.env.VITE_API_BASE_URL;
-const baseURL = shouldIgnoreLocalhostBaseUrl(envBaseURL) ? '' : (envBaseURL ?? '');
+// NOTE:
+// - In dev, we typically use the Vite proxy (/api -> localhost:4000), so baseURL can be ''.
+// - In production, set Vercel env var `VITE_API_BASE_URL` to your Railway backend origin
+//   (e.g. https://your-service.up.railway.app).
+const rawBaseURL = shouldIgnoreLocalhostBaseUrl(envBaseURL) ? '' : (envBaseURL ?? '');
+const baseURL = rawBaseURL ? String(rawBaseURL).replace(/\/+$/, '') : '';
 
-if (!baseURL) {
-  // Keep this loud: misconfiguration should be obvious in dev.
+if (!baseURL && import.meta.env.DEV) {
+  // Keep this loud in dev: misconfiguration should be obvious.
   // eslint-disable-next-line no-console
-  console.warn('VITE_API_BASE_URL is not set. Requests will likely fail.');
+  console.warn('VITE_API_BASE_URL is not set. Using same-origin URLs (dev proxy expected).');
 }
 
 export const api = axios.create({

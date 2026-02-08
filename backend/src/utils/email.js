@@ -1,6 +1,20 @@
 import { Resend } from 'resend';
 
-export const resend = new Resend(process.env.RESEND_API_KEY);
+function hasValue(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function isEmailEnabled() {
+  // Enable emails only if explicitly configured.
+  return hasValue(process.env.RESEND_API_KEY) && hasValue(process.env.EMAIL_FROM);
+}
+
+function getResendClient() {
+  if (!hasValue(process.env.RESEND_API_KEY)) {
+    throw new Error('Missing required environment variable: RESEND_API_KEY');
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -20,6 +34,15 @@ function requireEnv(name) {
 }
 
 export async function sendLoginVerificationCodeEmail({ to, code, expiresMinutes }) {
+  if (!isEmailEnabled()) {
+    // Allow the backend to run in local/dev environments without Resend configured.
+    // Auth flows that require email OTP will still fail at runtime if used,
+    // but the server won't crash on boot.
+    // eslint-disable-next-line no-console
+    console.warn('[EMAIL] Skipped sending OTP email: RESEND_API_KEY/EMAIL_FROM not configured');
+    return;
+  }
+
   const from = requireEnv('EMAIL_FROM');
   // Validate key presence even though the client is reusable.
   requireEnv('RESEND_API_KEY');
@@ -101,6 +124,7 @@ export async function sendLoginVerificationCodeEmail({ to, code, expiresMinutes 
   </body>
 </html>`;
 
+  const resend = getResendClient();
   const { data, error } = await resend.emails.send({
     from,
     to: recipient,
@@ -122,6 +146,11 @@ export async function sendLoginVerificationCodeEmail({ to, code, expiresMinutes 
 export async function sendPasswordResetEmail({ to, username, resetUrl, expiresMinutes }) {
   const from = requireEnv('EMAIL_FROM');
   requireEnv('RESEND_API_KEY');
+
+  // Create the client lazily so the module can be imported even when
+  // email is not configured (e.g., local/dev). This function will still throw
+  // if invoked without the required env vars.
+  const resend = getResendClient();
 
   const recipient = String(to);
   const safeName = escapeHtml(username || '');
