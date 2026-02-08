@@ -61,11 +61,21 @@ const allowedOrigins = (() => {
    return origins;
 })();
 
+const hasExplicitCorsOrigins = String(process.env.FRONTEND_ORIGINS ?? '').trim() !== '';
+
 app.use(
    cors({
       origin: (origin, callback) => {
          // Allow curl, Postman, server-to-server
          if (!origin) return callback(null, true);
+
+         // Backwards-compatible behavior:
+         // If no explicit production origins are configured, do not block.
+         // This keeps existing deployments working while still allowing teams
+         // to lock down origins by setting FRONTEND_ORIGINS.
+         if (!hasExplicitCorsOrigins) {
+            return callback(null, true);
+         }
 
          const allowed = allowedOrigins.some((o) =>
             typeof o === 'string' ? o === origin : o.test(origin)
