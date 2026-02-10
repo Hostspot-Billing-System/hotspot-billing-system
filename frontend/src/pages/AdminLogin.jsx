@@ -257,7 +257,22 @@ export default function AdminLogin() {
         setError(res?.data?.error || 'Login failed');
       }
     } catch (err) {
-      const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Login failed';
+      let msg = 'Login failed';
+      if (err?.response) {
+        if (err.response.data?.error) {
+          msg = err.response.data.error;
+        } else if (err.response.data?.message) {
+          msg = err.response.data.message;
+        } else if (err.response.status === 401) {
+          msg = 'Invalid username or password.';
+        } else if (err.response.status === 403) {
+          msg = 'Access denied.';
+        } else if (err.response.status === 500) {
+          msg = 'Server error. Please try again later.';
+        }
+      } else if (err?.message) {
+        msg = err.message;
+      }
       setError(msg);
     } finally {
       setLoading(false);

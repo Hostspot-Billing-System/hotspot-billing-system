@@ -91,6 +91,9 @@ app.use(
          return callback(null, true);
       },
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      exposedHeaders: ['Content-Type', 'Authorization'],
    })
 );
 
@@ -179,16 +182,17 @@ app.use((req, res) => {
   });
 });
 
-// ⚠️ STABLE CORE — DO NOT MODIFY WITHOUT FULL TEST
-// Global error handler: never return HTTP 500 to the frontend.
+
+// Global error handler: return proper status and structured JSON
 // NOTE: only handles errors forwarded via next(err).
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
    // eslint-disable-next-line no-console
    console.error('[ERROR]', err?.message ?? err);
-   res.status(200).json({
+   const status = err?.status && Number.isInteger(err.status) ? err.status : 500;
+   res.status(status).json({
       success: false,
-      error: err?.userMessage || 'Something went wrong',
+      error: err?.userMessage || err?.message || 'Something went wrong',
    });
 });
 
