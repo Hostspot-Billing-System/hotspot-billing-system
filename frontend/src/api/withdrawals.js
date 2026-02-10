@@ -68,8 +68,8 @@ export async function fetchWithdrawals(params = {}) {
 
 export async function fetchWithdrawalDetails(id) {
   try {
-    const response = await api.get(`/api/withdrawals/${id}`);
-    return response.data?.data;
+    const data = await apiFetch(`/api/withdrawals/${id}`);
+    return data?.data;
   } catch (e) {
     throwServerMessage(e, 'Failed to load withdrawal details');
   }

@@ -1,16 +1,18 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
-export async function getMyProfile() {
-  const res = await api.get('/api/my-profile');
-  return res?.data;
+  return apiFetch('/api/my-profile');
 }
 
-export async function updateMyProfile(payload) {
-  const res = await api.put('/api/my-profile', payload);
-  return res?.data;
+  return apiFetch('/api/my-profile', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
 }
 
-export async function changeMyPassword(payload) {
-  const res = await api.post('/api/my-profile/change-password', payload);
-  return res?.data;
+  return apiFetch('/api/my-profile/change-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
 }

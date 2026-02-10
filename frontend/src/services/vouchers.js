@@ -1,14 +1,13 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
+
 
 // GET /api/vouchers (filters only)
-export function listVouchers({ status, package_id, batch_id } = {}) {
-  return api.get('/api/vouchers', {
-    params: {
-      status,
-      package_id,
-      batch_id,
-    },
-  });
+export async function listVouchers({ status, package_id, batch_id } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  if (package_id) params.append('package_id', package_id);
+  if (batch_id) params.append('batch_id', batch_id);
+  return apiFetch(`/api/vouchers?${params.toString()}`);
 }
 
 // Backward-friendly alias (some pages may prefer this name)
@@ -18,40 +17,50 @@ export async function uploadVouchersCsv({ packageId, file }) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('package_id', String(packageId));
-
-  const response = await api.post('/api/vouchers/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/vouchers/upload`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
   });
-
-  // Expected backend shape: { success: true, inserted, batch_id }
-  return response.data;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Upload failed');
+  return data;
 }
 
 // POST /api/vouchers/redeem { code }
 export async function redeemVoucher({ code }) {
-  const response = await api.post('/api/vouchers/redeem', { code });
-  return response.data;
+  return apiFetch('/api/vouchers/redeem', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+    credentials: 'include',
+  });
 }
 
 // DELETE /api/vouchers/:id
 export async function deleteVoucherById(id) {
-  const response = await api.delete(`/api/vouchers/${id}`);
-  return response.data;
+  return apiFetch(`/api/vouchers/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
 }
 
 // POST /api/vouchers/bulk-delete { ids: number[] }
 // Backward-compatible: older backend route is /api/vouchers/delete-bulk
 export async function bulkDeleteVouchersByIds(ids) {
   try {
-    const response = await api.post('/api/vouchers/bulk-delete', { ids });
-    return response.data;
+    return await apiFetch('/api/vouchers/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+      credentials: 'include',
+    });
   } catch (err) {
-    const status = err?.response?.status;
-    const code = err?.response?.data?.error?.code;
     // Fallback for older deployments that only have /delete-bulk.
-    if (status === 404 || code === 'NOT_FOUND') {
-      const response = await api.post('/api/vouchers/delete-bulk', { ids });
-      return response.data;
+    if (err.message?.includes('404') || err.message?.includes('NOT_FOUND')) {
+      return await apiFetch('/api/vouchers/delete-bulk', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+        credentials: 'include',
+      });
     }
     throw err;
   }

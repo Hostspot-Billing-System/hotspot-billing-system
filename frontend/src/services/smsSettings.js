@@ -1,11 +1,13 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
 export async function getSmsSettings() {
-  const res = await api.get('/api/sms-settings');
-  return res?.data;
+  return apiFetch('/api/sms-settings');
 }
 
 export async function updateSmsSettings(payload) {
-  const res = await api.put('/api/sms-settings', payload);
-  return res?.data;
+  return apiFetch('/api/sms-settings', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
 }

@@ -1,5 +1,5 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
-export function getClientsOverview(params) {
-  return api.get('/api/clients/overview', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/clients/overview?${search}`);
 }

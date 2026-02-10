@@ -1,30 +1,40 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
-export function getBundles(params) {
-  return api.get('/api/bundles', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/bundles?${search}`);
 }
 
 export async function listBundles(params) {
-  const res = await getBundles(params);
-  const data = res?.data;
+  const data = await getBundles(params);
   if (data && typeof data === 'object' && data.success === true && Array.isArray(data.data)) {
     return data.data;
   }
   return [];
 }
 
-export function createBundle(payload) {
-  return api.post('/api/bundles', payload);
+  return apiFetch('/api/bundles', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
 }
 
-export function updateBundle(id, payload) {
-  return api.put(`/api/bundles/${id}`, payload);
+  return apiFetch(`/api/bundles/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
 }
 
-export function patchBundleStatus(id, status) {
-  return api.patch(`/api/bundles/${id}/status`, { status });
+  return apiFetch(`/api/bundles/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+    credentials: 'include',
+  });
 }
 
-export function deleteBundle(id) {
-  return api.delete(`/api/bundles/${id}`);
+  return apiFetch(`/api/bundles/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
 }

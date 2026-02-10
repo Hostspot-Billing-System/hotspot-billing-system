@@ -1,17 +1,27 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
 export function listRouters() {
-  return api.get('/api/routers');
+  return apiFetch('/api/routers');
 }
 
 export function createRouter(payload) {
-  return api.post('/api/routers', payload);
+  return apiFetch('/api/routers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
 }
 
 export function testRouter(id) {
-  return api.post(`/api/routers/${id}/test`);
+  return apiFetch(`/api/routers/${id}/test`, {
+    method: 'POST',
+    credentials: 'include',
+  });
 }
 
 export function deleteRouter(id) {
-  return api.delete(`/api/routers/${id}`);
+  return apiFetch(`/api/routers/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
 }

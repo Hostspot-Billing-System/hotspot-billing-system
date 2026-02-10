@@ -1,4 +1,4 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
 function unwrapSuccess(responseData) {
 	if (responseData && typeof responseData === 'object') {
@@ -42,16 +42,14 @@ export function getApiErrorMessage(err) {
 	return 'Request failed';
 }
 
-export async function fetchPortalContext(params) {
-	const res = await api.get('/api/portal/context', { params });
-	return unwrapSuccess(res.data);
+	const search = params ? `?${new URLSearchParams(params).toString()}` : '';
+	const data = await apiFetch(`/api/portal/context${search}`);
+	return unwrapSuccess(data);
 }
 
-export async function fetchPortalBundles() {
-	const res = await api.get('/api/bundles', { params: { status: 'active' } });
-	const payload = res?.data;
-	if (payload && typeof payload === 'object' && payload.success === true && Array.isArray(payload.data)) {
-		return payload.data
+	const data = await apiFetch('/api/bundles?status=active');
+	if (data && typeof data === 'object' && data.success === true && Array.isArray(data.data)) {
+		return data.data
 			.map((b) => {
 				const id = String(b?.id ?? '').trim();
 				const name = String(b?.name ?? '').trim();
@@ -66,44 +64,55 @@ export async function fetchPortalBundles() {
 			})
 			.filter(Boolean);
 	}
-
-	return unwrapSuccess(payload);
+	return unwrapSuccess(data);
 }
 
-export async function voucherLogin({ mac, ip, voucher_code }) {
-	const res = await api.post('/api/portal/voucher-login', { mac, ip, voucher_code });
-	return unwrapSuccess(res.data);
+	const data = await apiFetch('/api/portal/voucher-login', {
+		method: 'POST',
+		body: JSON.stringify({ mac, ip, voucher_code }),
+		credentials: 'include',
+	});
+	return unwrapSuccess(data);
 }
 
-export async function voucherConnect({ voucher }) {
-	const res = await api.post('/api/portal/voucher/connect', { voucher });
-	return unwrapSuccess(res.data);
+	const data = await apiFetch('/api/portal/voucher/connect', {
+		method: 'POST',
+		body: JSON.stringify({ voucher }),
+		credentials: 'include',
+	});
+	return unwrapSuccess(data);
 }
 
-export async function createPortalPaymentIntent({ mac, ip, phone, bundle_id }) {
-	const res = await api.post('/api/portal/pay', { mac, ip, phone, bundle_id, payment_provider: 'MTN' });
-	return unwrapSuccess(res.data);
+	const data = await apiFetch('/api/portal/pay', {
+		method: 'POST',
+		body: JSON.stringify({ mac, ip, phone, bundle_id, payment_provider: 'MTN' }),
+		credentials: 'include',
+	});
+	return unwrapSuccess(data);
 }
 
 
-export async function buyBundle({ phone, bundle_id, bundleId } = {}) {
 	const effectiveBundleId = bundle_id ?? bundleId;
-	const res = await api.post('/api/portal/buy', { phone, bundle_id: effectiveBundleId, payment_provider: 'MTN' });
-	return unwrapSuccess(res.data);
+	const data = await apiFetch('/api/portal/buy', {
+		method: 'POST',
+		body: JSON.stringify({ phone, bundle_id: effectiveBundleId, payment_provider: 'MTN' }),
+		credentials: 'include',
+	});
+	return unwrapSuccess(data);
 }
 
 // Flutterwave mobile money (MTN/Airtel Uganda)
 export async function initiateFlutterwavePayment({ phoneNumber, bundleId, network } = {}) {
-	const res = await api.post('/api/payments/flutterwave/initiate', {
-		phoneNumber,
-		bundleId,
-		network,
+	const data = await apiFetch('/api/payments/flutterwave/initiate', {
+		method: 'POST',
+		body: JSON.stringify({ phoneNumber, bundleId, network }),
+		credentials: 'include',
 	});
-	return unwrapSuccess(res.data);
+	return unwrapSuccess(data);
 }
 
 export async function fetchPaymentStatus(txRef) {
 	const ref = String(txRef ?? '').trim();
-	const res = await api.get(`/api/payments/status/${encodeURIComponent(ref)}`);
-	return unwrapSuccess(res.data);
+	const data = await apiFetch(`/api/payments/status/${encodeURIComponent(ref)}`);
+	return unwrapSuccess(data);
 }

@@ -1,9 +1,7 @@
-import { api } from "./api";
+import { apiFetch } from '../utils/requests';
 
-export const getPackages = () => {
-  return api.get("/api/packages");
+  return apiFetch('/api/packages');
 };
 
-export const getPackagesFull = () => {
-  return api.get("/api/packages/full");
+  return apiFetch('/api/packages/full');
 };

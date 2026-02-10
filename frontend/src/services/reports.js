@@ -1,37 +1,46 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
 export function getReportsSummary(params) {
-  return api.get('/api/reports/summary', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/summary?${search}`);
 }
 
 export function getDailyRevenue(params) {
-  return api.get('/api/reports/daily-revenue', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/daily-revenue?${search}`);
 }
 
 export function getBundlePerformance(params) {
-  return api.get('/api/reports/bundle-performance', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/bundle-performance?${search}`);
 }
 
 export function getBundlePerformanceDetails(params) {
-  return api.get('/api/reports/bundle-performance-details', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/bundle-performance-details?${search}`);
 }
 
 export function getPaymentMethods(params) {
-  return api.get('/api/reports/payment-methods', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/payment-methods?${search}`);
 }
 
 export function getHourlySales(params) {
-  return api.get('/api/reports/hourly-sales', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/hourly-sales?${search}`);
 }
 
 export function getVoucherStats(params) {
-  return api.get('/api/reports/voucher-stats', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/voucher-stats?${search}`);
 }
 
 export function getVoucherDistribution(params) {
-  return api.get('/api/reports/voucher-distribution', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/voucher-distribution?${search}`);
 }
 
 export function getRecentVoucherUsage(params) {
-  return api.get('/api/reports/recent-voucher-usage', { params });
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/reports/recent-voucher-usage?${search}`);
 }

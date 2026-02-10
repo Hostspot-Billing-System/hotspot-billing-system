@@ -1,4 +1,4 @@
-import { api } from '../services/api';
+import { apiFetch } from '../utils/requests';
 
 function buildDefaultFilename() {
   const dateStamp = new Date().toISOString().slice(0, 10);
@@ -19,25 +19,24 @@ function downloadBlob(blob, filename) {
 // GET /api/admin/transactions
 // Supports filters: q, status, bundle_id, min_amount, max_amount, from_date, to_date, page, per_page
 
-export async function fetchTransactions(params = {}) {
-  const response = await api.get('/api/transactions', { params });
+  const search = new URLSearchParams(params).toString();
+  const data = await apiFetch(`/api/transactions?${search}`);
   return {
-    data: Array.isArray(response.data?.data) ? response.data.data : [],
-    meta: response.data?.meta ?? { page: 1, perPage: 20, total: 0, totalPages: 0 },
+    data: Array.isArray(data?.data) ? data.data : [],
+    meta: data?.meta ?? { page: 1, perPage: 20, total: 0, totalPages: 0 },
   };
 }
 
-export async function fetchAdminTransactions(params = {}) {
-  const response = await api.get('/api/admin/transactions', { params });
-  return response.data;
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/admin/transactions?${search}`);
 }
 
-export async function exportTransactionsCSV(params = {}) {
-  const response = await api.get('/api/transactions/export', {
-    params,
-    responseType: 'blob',
+  const search = new URLSearchParams(params).toString();
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transactions/export?${search}`, {
+    method: 'GET',
+    credentials: 'include',
   });
-
+  const blob = await res.blob();
   const filename = buildDefaultFilename();
-  downloadBlob(response.data, filename);
+  downloadBlob(blob, filename);
 }

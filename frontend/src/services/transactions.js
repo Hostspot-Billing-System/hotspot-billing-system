@@ -1,17 +1,16 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
 // GET /api/transactions
 // Supports filters: status, bundle_id, date_from, date_to, search, page, limit
 export async function fetchTransactions(params = {}) {
-  const response = await api.get('/api/transactions', { params });
-  return response.data;
+  const search = new URLSearchParams(params).toString();
+  return apiFetch(`/api/transactions?${search}`);
 }
 
 // GET /api/transactions/:id
 // Note: requires backend route to exist.
 export async function fetchTransactionById(id) {
-  const response = await api.get(`/api/transactions/${encodeURIComponent(String(id))}`);
-  return response.data;
+  return apiFetch(`/api/transactions/${encodeURIComponent(String(id))}`);
 }
 
 function getFilenameFromContentDisposition(headerValue) {
@@ -24,15 +23,12 @@ function getFilenameFromContentDisposition(headerValue) {
 // GET /api/transactions/export
 // Returns a CSV download as a Blob + suggested filename (if provided by backend).
 export async function exportTransactionsCSV(params = {}) {
-  const response = await api.get('/api/transactions/export', {
-    params,
-    responseType: 'blob',
+  const search = new URLSearchParams(params).toString();
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transactions/export?${search}`, {
+    method: 'GET',
+    credentials: 'include',
   });
-
-  const filename = getFilenameFromContentDisposition(response.headers?.['content-disposition']);
-
-  return {
-    blob: response.data,
-    filename,
-  };
+  const blob = await res.blob();
+  const filename = getFilenameFromContentDisposition(res.headers.get('content-disposition'));
+  return { blob, filename };
 }

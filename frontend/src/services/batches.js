@@ -1,6 +1,5 @@
-import { api } from './api';
+import { apiFetch } from '../utils/requests';
 
 // GET /api/voucher-batches
-export function getVoucherBatches() {
-  return api.get('/api/voucher-batches');
+  return apiFetch('/api/voucher-batches');
 }
