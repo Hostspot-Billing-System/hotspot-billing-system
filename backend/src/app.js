@@ -45,41 +45,22 @@ if (env.APP_ENV === 'production') {
 //   FRONTEND_ORIGINS=https://yourapp.vercel.app,https://www.yourdomain.com
 
 const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174',
-  /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
-  /^https:\/\/.+\.pages\.dev$/,
+   "http://localhost:3000",
+   "http://localhost:5173",
+   "https://admin-omega-wifi.pages.dev"
 ];
-if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
-}
 
 app.use(
    cors({
-      origin: (origin, callback) => {
-         // Allow curl, Postman, server-to-server
+      origin(origin, callback) {
          if (!origin) return callback(null, true);
-
-         const allowed = allowedOrigins.some((o) =>
-            typeof o === 'string' ? o === origin : o.test(origin)
-         );
-
-         if (!allowed) {
-            if (env.APP_ENV !== 'production') {
-              // eslint-disable-next-line no-console
-              console.warn('[CORS] Blocked origin:', origin);
-            }
-            return callback(null, false);
-         }
-
-         return callback(null, true);
+         if (allowedOrigins.includes(origin)) return callback(null, true);
+         console.error("Blocked by CORS:", origin);
+         return callback(new Error("Not allowed by CORS"));
       },
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-      exposedHeaders: ['Content-Type', 'Authorization'],
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"]
    })
 );
 
