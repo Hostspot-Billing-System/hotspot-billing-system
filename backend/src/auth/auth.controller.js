@@ -108,6 +108,13 @@ export async function postVerify(req, res) {
 
 export function getMe(req, res) {
   const result = me({ session: req.session, req });
+  if (!result.isAuthenticated) {
+    return res.status(401).json({
+      success: false,
+      isAuthenticated: false,
+      error: 'Not authenticated',
+    });
+  }
   return res.json(result);
 }
 
