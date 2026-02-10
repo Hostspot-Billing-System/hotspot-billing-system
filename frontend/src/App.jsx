@@ -15,7 +15,7 @@ import AdminClients from './pages/AdminClients.jsx';
 import MikroTikRouters from './pages/MikroTikRouters.jsx';
 import PortalHome from './portal/PortalHome.jsx';
 import MyProfile from './pages/MyProfile.jsx';
-import { api } from './services/api.js';
+import { getSession } from './services/auth.service.js';
 import FullPageLoader from './components/FullPageLoader.jsx';
 
 function getPath() {
@@ -52,9 +52,9 @@ export default function App() {
 
     async function checkSession() {
       try {
-        const res = await api.get('/api/auth/me');
+        const res = await getSession();
         if (cancelled) return;
-        const isAuthenticated = Boolean(res?.data?.isAuthenticated);
+        const isAuthenticated = Boolean(res?.isAuthenticated);
         setAuth({ checked: true, isAuthenticated });
 
         if (isAuthenticated && path === '/admin/login') {

@@ -1,3 +1,29 @@
+import { sendTestEmail } from '../utils/email.js';
+
+// GET /api/admin/email-diagnostics
+export async function getAdminEmailDiagnostics(req, res) {
+  try {
+    const to = req.query?.to || undefined;
+    const diagnostics = await sendTestEmail({ to });
+    if (!diagnostics.ok) {
+      return res.status(500).json({
+        success: false,
+        error: diagnostics.error || 'Email diagnostics failed',
+        details: diagnostics.details,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      sent: diagnostics.sent,
+      details: diagnostics.details,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Email diagnostics error',
+    });
+  }
+}
 import { query } from '../config/db.js';
 import { getSmsStatus } from '../services/smsStatusService.js';
 

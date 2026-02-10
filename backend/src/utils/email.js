@@ -1,3 +1,47 @@
+/**
+ * Diagnostics: Checks if email is enabled and attempts to send a test email.
+ * Returns { ok, error, sent, details }
+ */
+export async function sendTestEmail({ to }) {
+  const diagnostics = {
+    ok: false,
+    error: null,
+    sent: false,
+    details: {
+      RESEND_API_KEY: hasValue(process.env.RESEND_API_KEY),
+      EMAIL_FROM: hasValue(process.env.EMAIL_FROM),
+      NODE_ENV: process.env.NODE_ENV,
+    },
+  };
+  if (!hasValue(process.env.RESEND_API_KEY)) {
+    diagnostics.error = 'Missing RESEND_API_KEY';
+    return diagnostics;
+  }
+  if (!hasValue(process.env.EMAIL_FROM)) {
+    diagnostics.error = 'Missing EMAIL_FROM';
+    return diagnostics;
+  }
+  try {
+    const resend = getResendClient();
+    const from = process.env.EMAIL_FROM;
+    const recipient = to || from;
+    const subject = 'Omega WiFi Email Diagnostics';
+    const text = 'This is a test email from Omega WiFi backend diagnostics.';
+    const html = `<p>This is a <b>test email</b> from Omega WiFi backend diagnostics.</p>`;
+    const { data, error } = await resend.emails.send({ from, to: recipient, subject, text, html });
+    if (error) {
+      diagnostics.error = error.message || 'Failed to send test email';
+      return diagnostics;
+    }
+    diagnostics.ok = true;
+    diagnostics.sent = !!data?.id;
+    diagnostics.details.data = data;
+    return diagnostics;
+  } catch (err) {
+    diagnostics.error = err?.message || String(err);
+    return diagnostics;
+  }
+}
 import { Resend } from 'resend';
 
 function hasValue(value) {

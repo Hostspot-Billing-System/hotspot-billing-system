@@ -2,7 +2,7 @@ import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } f
 import { alpha, useTheme } from '@mui/material/styles';
 import { useMemo, useState } from 'react';
 import billingLogo from '../assets/billing_logo.png';
-import { api } from '../services/api.js';
+import { requestPasswordReset } from '../services/auth.service.js';
 import { useColorMode } from '../theme/colorMode.js';
 
 function navigateTo(path) {
@@ -83,12 +83,11 @@ export default function ForgotPassword() {
     try {
       const addr = String(email ?? '').trim();
       setSubmittedEmail(addr);
-      await api.post('/api/auth/forgot-password', { email: addr });
+      await requestPasswordReset(addr);
       setSent(true);
     } catch (e) {
-      // Still show success UX to avoid enumeration.
       setSent(true);
-      const msg = e?.response?.data?.error || e?.message || '';
+      const msg = e?.message || '';
       if (msg) setError(msg);
     } finally {
       setLoading(false);
@@ -101,9 +100,9 @@ export default function ForgotPassword() {
     setLoading(true);
     setError('');
     try {
-      await api.post('/api/auth/forgot-password', { email: addr });
+      await requestPasswordReset(addr);
     } catch (e) {
-      const msg = e?.response?.data?.error || e?.message || '';
+      const msg = e?.message || '';
       if (msg) setError(msg);
     } finally {
       setLoading(false);

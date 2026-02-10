@@ -1,7 +1,7 @@
 import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { alpha, useTheme } from '@mui/material/styles';
-import { api } from '../services/api';
+import { login, getSession } from '../services/auth.service.js';
 import FullPageLoader from '../components/FullPageLoader.jsx';
 import billingLogo from '../assets/billing_logo.png';
 import { useColorMode } from '../theme/colorMode.js';
@@ -216,9 +216,9 @@ export default function AdminLogin() {
     let cancelled = false;
     async function check() {
       try {
-        const res = await api.get('/api/auth/me');
+        const res = await getSession();
         if (cancelled) return;
-        if (res?.data?.isAuthenticated) {
+        if (res?.isAuthenticated) {
           navigateTo('/admin/dashboard');
         }
       } catch {
@@ -239,41 +239,20 @@ export default function AdminLogin() {
     setError('');
     setVerifying(false);
     try {
-      const res = await api.post('/api/auth/login', {
-        username: username.trim(),
-        password,
-      });
-
-      const requiresOtp = res?.data?.requiresOtp === true || res?.data?.requires_verification === true;
-
-      if (res?.data?.success && requiresOtp) {
+      const res = await login({ username: username.trim(), password });
+      const requiresOtp = res?.requiresOtp === true || res?.requires_verification === true;
+      if (res?.success && requiresOtp) {
         setStep('otp');
         setOtp(Array(6).fill(''));
         setOtpExpiresAt(Date.now() + 10 * 60 * 1000);
         setNowMs(Date.now());
-      } else if (res?.data?.success && (res?.data?.requiresOtp === false || res?.data?.requires_verification === false)) {
+      } else if (res?.success && (res?.requiresOtp === false || res?.requires_verification === false)) {
         navigateTo('/admin/dashboard');
       } else {
-        setError(res?.data?.error || 'Login failed');
+        setError(res?.error || 'Login failed');
       }
     } catch (err) {
-      let msg = 'Login failed';
-      if (err?.response) {
-        if (err.response.data?.error) {
-          msg = err.response.data.error;
-        } else if (err.response.data?.message) {
-          msg = err.response.data.message;
-        } else if (err.response.status === 401) {
-          msg = 'Invalid username or password.';
-        } else if (err.response.status === 403) {
-          msg = 'Access denied.';
-        } else if (err.response.status === 500) {
-          msg = 'Server error. Please try again later.';
-        }
-      } else if (err?.message) {
-        msg = err.message;
-      }
-      setError(msg);
+      setError(err?.message || 'Login failed');
     } finally {
       setLoading(false);
     }

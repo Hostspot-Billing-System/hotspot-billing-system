@@ -2,7 +2,7 @@ import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Stac
 import { alpha, useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useState } from 'react';
 import billingLogo from '../assets/billing_logo.png';
-import { api } from '../services/api.js';
+import { resetPassword } from '../services/auth.service.js';
 import { useColorMode } from '../theme/colorMode.js';
 
 function navigateTo(path) {
@@ -149,14 +149,10 @@ export default function ResetPassword() {
     setSaving(true);
     setError('');
     try {
-      await api.post('/api/auth/reset-password', {
-        token,
-        new_password: String(pw.new_password ?? ''),
-        confirm_password: String(pw.confirm_password ?? ''),
-      });
+      await resetPassword(token, String(pw.new_password ?? ''));
       setDone(true);
     } catch (e) {
-      const msg = e?.response?.data?.error || e?.message || 'Failed to reset password';
+      const msg = e?.message || 'Failed to reset password';
       setError(msg);
     } finally {
       setSaving(false);

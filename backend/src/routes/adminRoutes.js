@@ -2,7 +2,10 @@ import { Router } from 'express';
 import {
 	getAdminDashboardMetrics,
 	getAdminDashboardRecentTransactions,
+	getAdminEmailDiagnostics,
 } from '../controllers/adminDashboardController.js';
+// GET /api/admin/email-diagnostics
+router.get('/email-diagnostics', getAdminEmailDiagnostics);
 import { listAdminTransactions } from '../controllers/adminTransactionsController.js';
 import { getAdminWithdrawalsSummary } from '../controllers/adminWithdrawalsController.js';
 

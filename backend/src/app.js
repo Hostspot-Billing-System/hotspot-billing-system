@@ -43,25 +43,18 @@ if (env.APP_ENV === 'production') {
 // - Production should explicitly allow the deployed frontend domain.
 //   Configure with `FRONTEND_ORIGINS` (comma-separated), e.g.
 //   FRONTEND_ORIGINS=https://yourapp.vercel.app,https://www.yourdomain.com
-const allowedOrigins = (() => {
-   const origins = [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:5174',
-      /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
-   ];
 
-   const extra = String(process.env.FRONTEND_ORIGINS ?? '')
-      .split(',')
-      .map((v) => v.trim())
-      .filter(Boolean);
-   origins.push(...extra);
-
-   return origins;
-})();
-
-const hasExplicitCorsOrigins = String(process.env.FRONTEND_ORIGINS ?? '').trim() !== '';
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
+  /^https:\/\/.+\.pages\.dev$/,
+];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 
 app.use(
    cors({
@@ -69,22 +62,15 @@ app.use(
          // Allow curl, Postman, server-to-server
          if (!origin) return callback(null, true);
 
-         // Backwards-compatible behavior:
-         // If no explicit production origins are configured, do not block.
-         // This keeps existing deployments working while still allowing teams
-         // to lock down origins by setting FRONTEND_ORIGINS.
-         if (!hasExplicitCorsOrigins) {
-            return callback(null, true);
-         }
-
          const allowed = allowedOrigins.some((o) =>
             typeof o === 'string' ? o === origin : o.test(origin)
          );
 
          if (!allowed) {
-            // Never crash the server due to CORS, but do not grant CORS headers.
-            // eslint-disable-next-line no-console
-            console.warn('[CORS] Blocked origin:', origin);
+            if (env.APP_ENV !== 'production') {
+              // eslint-disable-next-line no-console
+              console.warn('[CORS] Blocked origin:', origin);
+            }
             return callback(null, false);
          }
 
