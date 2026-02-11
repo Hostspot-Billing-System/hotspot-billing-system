@@ -1,3 +1,14 @@
+// POST /api/portal/voucher-connect
+export function voucherConnect(payload) {
+	return apiFetch('/api/portal/voucher-connect', {
+		method: 'POST',
+		body: JSON.stringify(payload),
+	});
+}
+// GET /api/portal/bundles
+export function fetchPortalBundles() {
+	return apiFetch('/api/portal/bundles');
+}
 import { apiFetch } from '../utils/requests';
 
 function unwrapSuccess(responseData) {
@@ -42,11 +53,17 @@ export function getApiErrorMessage(err) {
 	return 'Request failed';
 }
 
+
+// GET /api/portal/context
+export async function getPortalContext(params) {
 	const search = params ? `?${new URLSearchParams(params).toString()}` : '';
 	const data = await apiFetch(`/api/portal/context${search}`);
 	return unwrapSuccess(data);
 }
 
+
+// GET /api/bundles?status=active
+export async function getActiveBundles() {
 	const data = await apiFetch('/api/bundles?status=active');
 	if (data && typeof data === 'object' && data.success === true && Array.isArray(data.data)) {
 		return data.data
@@ -67,6 +84,9 @@ export function getApiErrorMessage(err) {
 	return unwrapSuccess(data);
 }
 
+
+// POST /api/portal/voucher-login
+export async function portalVoucherLogin({ mac, ip, voucher_code }) {
 	const data = await apiFetch('/api/portal/voucher-login', {
 		method: 'POST',
 		body: JSON.stringify({ mac, ip, voucher_code }),
@@ -75,6 +95,9 @@ export function getApiErrorMessage(err) {
 	return unwrapSuccess(data);
 }
 
+
+// POST /api/portal/voucher/connect
+export async function portalVoucherConnect({ voucher }) {
 	const data = await apiFetch('/api/portal/voucher/connect', {
 		method: 'POST',
 		body: JSON.stringify({ voucher }),
@@ -83,6 +106,9 @@ export function getApiErrorMessage(err) {
 	return unwrapSuccess(data);
 }
 
+
+// POST /api/portal/pay
+export async function portalPay({ mac, ip, phone, bundle_id }) {
 	const data = await apiFetch('/api/portal/pay', {
 		method: 'POST',
 		body: JSON.stringify({ mac, ip, phone, bundle_id, payment_provider: 'MTN' }),
@@ -92,6 +118,9 @@ export function getApiErrorMessage(err) {
 }
 
 
+
+// POST /api/portal/buy
+export async function portalBuy({ phone, bundle_id, bundleId }) {
 	const effectiveBundleId = bundle_id ?? bundleId;
 	const data = await apiFetch('/api/portal/buy', {
 		method: 'POST',

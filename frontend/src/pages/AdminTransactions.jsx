@@ -26,7 +26,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 
 import { listBundles } from '../services/bundles';
-import { exportTransactionsCSV, fetchAdminTransactions } from '../api/transactions';
+import { exportTransactions, getAdminTransactions } from '../api/transactions';
 import TransactionDetailsModal from '../components/TransactionDetailsModal';
 
 function Icon({ path, size = 18, color = 'currentColor' }) {

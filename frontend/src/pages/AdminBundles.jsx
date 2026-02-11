@@ -23,7 +23,7 @@ import {
   Typography,
 } from '@mui/material';
 
-import { createBundle, deleteBundle, listBundles, patchBundleStatus, updateBundle } from '../services/bundles';
+import { createBundle, deleteBundle, listBundles, updateBundleStatus, updateBundle } from '../services/bundles';
 
 function extractBackendError(err) {
   const data = err?.response?.data;

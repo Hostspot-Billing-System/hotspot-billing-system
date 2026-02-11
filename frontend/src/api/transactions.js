@@ -19,6 +19,9 @@ function downloadBlob(blob, filename) {
 // GET /api/admin/transactions
 // Supports filters: q, status, bundle_id, min_amount, max_amount, from_date, to_date, page, per_page
 
+
+// GET /api/transactions
+export async function getTransactions(params) {
   const search = new URLSearchParams(params).toString();
   const data = await apiFetch(`/api/transactions?${search}`);
   return {
@@ -27,10 +30,16 @@ function downloadBlob(blob, filename) {
   };
 }
 
+
+// GET /api/admin/transactions
+export function getAdminTransactions(params) {
   const search = new URLSearchParams(params).toString();
   return apiFetch(`/api/admin/transactions?${search}`);
 }
 
+
+// EXPORT /api/transactions/export
+export async function exportTransactions(params) {
   const search = new URLSearchParams(params).toString();
   const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transactions/export?${search}`, {
     method: 'GET',
