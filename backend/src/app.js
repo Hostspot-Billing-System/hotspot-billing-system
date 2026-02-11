@@ -43,25 +43,26 @@ if (env.APP_ENV === 'production') {
 //   Configure with `FRONTEND_ORIGINS` (comma-separated), e.g.
 //   FRONTEND_ORIGINS=https://yourapp.vercel.app,https://www.yourdomain.com
 
+
 const allowedOrigins = [
-   "http://localhost:3000",
-   "http://localhost:5173",
-   "https://admin-omega-wifi.pages.dev"
+   "https://admin-omega-wifi.pages.dev",
 ];
 
-app.use(
-   cors({
-      origin(origin, callback) {
-         if (!origin) return callback(null, true);
-         if (allowedOrigins.includes(origin)) return callback(null, true);
-         console.error("Blocked by CORS:", origin);
-         return callback(new Error("Not allowed by CORS"));
-      },
-      credentials: true,
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization"]
-   })
-);
+app.use(cors({
+   origin: function(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1) {
+         callback(null, true);
+      } else {
+         callback(new Error("Not allowed by CORS"));
+      }
+   },
+   credentials: true,
+   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+   allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+app.options("*", cors());
 
 /* =========================
    SESSION
@@ -70,25 +71,17 @@ if (!process.env.SESSION_SECRET || String(process.env.SESSION_SECRET).trim() ===
    throw new Error('Missing required environment variable: SESSION_SECRET');
 }
 
-app.use(
-   session({
-      name: 'omega.sid',
-      secret: process.env.SESSION_SECRET,
-      resave: false,
-      saveUninitialized: false,
-      // PRODUCTION NOTE:
-      // Enables secure cookies when running behind a proxy (Railway/Vercel).
-      proxy: env.APP_ENV === 'production',
-      cookie: {
-         httpOnly: true,
-         // Required for cross-site cookies (Vercel frontend -> Railway backend).
-         // Safe for same-site too; keeps auth stable across environments.
-         sameSite: env.APP_ENV === 'production' ? 'none' : 'lax',
-         secure: env.APP_ENV === 'production',
-         maxAge: 7 * 24 * 60 * 60 * 1000,
-      },
-   })
-);
+app.use(session({
+  name: "omega_session",
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: true,        // IMPORTANT for HTTPS
+    httpOnly: true,
+    sameSite: "none",    // REQUIRED for cross-site cookies
+  }
+}));
 
 /* =========================
    MIDDLEWARE
