@@ -22,7 +22,6 @@ import clientsRoutes from "./routes/clientsRoutes.js";
 import routersRoutes from "./routes/routersRoutes.js";
 import smsSettingsRoutes from "./routes/smsSettingsRoutes.js";
 import myProfileRoutes from "./routes/myProfileRoutes.js";
-import paymentsRoutes from "./routes/paymentsRoutes.js";
 import authRoutes from './auth/auth.routes.js';
 import requireAuth from './middleware/requireAuth.js';
 
@@ -131,7 +130,6 @@ app.use("/api/clients", requireAuth, clientsRoutes);
 app.use("/api/routers", requireAuth, routersRoutes);
 app.use("/api/sms-settings", requireAuth, smsSettingsRoutes);
 app.use("/api/my-profile", requireAuth, myProfileRoutes);
-app.use("/api/payments", requireAuth, paymentsRoutes);
 
 /* =========================
    ADMIN & MIKROTIK
