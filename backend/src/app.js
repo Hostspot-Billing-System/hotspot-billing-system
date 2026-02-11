@@ -34,33 +34,29 @@ if (env.APP_ENV === 'production') {
    app.set('trust proxy', 1);
 }
 
-/* =========================
-   CORS CONFIG
-========================= */
-// CORS origins:
-// - Local dev origins are always allowed.
-// - Production should explicitly allow the deployed frontend domain.
-//   Configure with `FRONTEND_ORIGINS` (comma-separated), e.g.
-//   FRONTEND_ORIGINS=https://yourapp.vercel.app,https://www.yourdomain.com
 
+// --- PRODUCTION-READY CORS CONFIG FOR CLOUDFLARE PAGES FRONTEND ---
+import cors from 'cors';
 
 const allowedOrigins = [
-   "https://admin-omega-wifi.pages.dev",
+  'https://admin-omega-wifi.pages.dev',
 ];
 
 app.use(cors({
-   origin: function(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1) {
-         callback(null, true);
-      } else {
-         callback(new Error("Not allowed by CORS"));
-      }
-   },
-   credentials: true,
-   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-   allowedHeaders: ["Content-Type", "Authorization"],
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+app.options('*', cors());
 
 
 /* =========================
@@ -70,16 +66,15 @@ if (!process.env.SESSION_SECRET || String(process.env.SESSION_SECRET).trim() ===
    throw new Error('Missing required environment variable: SESSION_SECRET');
 }
 
+app.set('trust proxy', 1);
 app.use(session({
-  name: "omega_session",
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,        // IMPORTANT for HTTPS
-    httpOnly: true,
-    sameSite: "none",    // REQUIRED for cross-site cookies
-  }
+   secret: process.env.SESSION_SECRET,
+   resave: false,
+   saveUninitialized: false,
+   cookie: {
+      secure: true,
+      sameSite: 'none'
+   }
 }));
 
 /* =========================
