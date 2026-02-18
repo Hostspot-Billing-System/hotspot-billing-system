@@ -36,8 +36,6 @@ if (env.APP_ENV === 'production') {
 
 
 // --- PRODUCTION-READY CORS CONFIG FOR CLOUDFLARE PAGES FRONTEND ---
-import cors from 'cors';
-
 const allowedOrigins = [
   'https://admin-omega-wifi.pages.dev',
 ];
@@ -56,7 +54,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.options('*', cors());
+
 
 
 /* =========================
