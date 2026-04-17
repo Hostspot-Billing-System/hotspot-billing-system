@@ -27,8 +27,8 @@ async function start() {
     console.warn(`MikroTik connection: failed (${code}). Runtime endpoints may be unavailable.`);
   }
 
-  app.listen(env.PORT, () => {
-    console.log(`Backend running on port ${env.PORT}`);
+  app.listen(env.PORT, env.HOST, () => {
+    console.log(`Backend running on http://${env.HOST}:${env.PORT}`);
     startMikroTikExpiryCron();
   });
 }

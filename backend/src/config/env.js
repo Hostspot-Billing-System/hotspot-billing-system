@@ -37,6 +37,7 @@ ensureDbEnv();
 
 export const env = {
   APP_ENV: process.env.APP_ENV ?? 'development',
+  HOST: process.env.HOST ?? '0.0.0.0',
   PORT: Number(process.env.PORT ?? 4000),
   DATABASE_URL: process.env.DATABASE_URL ?? process.env.DATABASE_PUBLIC_URL,
   PGHOST: process.env.PGHOST,
