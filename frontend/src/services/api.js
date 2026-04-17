@@ -8,6 +8,7 @@ if (!baseURL && import.meta.env.DEV) {
 }
 
 export const api = axios.create({
+  // Keep API defaults centralized so both local and hosted builds use the same client behavior.
   baseURL,
   timeout: 15000,
   withCredentials: true,

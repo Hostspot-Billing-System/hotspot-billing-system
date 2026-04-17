@@ -10,6 +10,7 @@ if (env.MIKROTIK_MOCK) {
 }
 
 async function start() {
+  // Startup checks are best-effort so the web process can still boot and expose diagnostics.
   try {
     await checkDbConnection();
     console.log('Database connection: ok');
