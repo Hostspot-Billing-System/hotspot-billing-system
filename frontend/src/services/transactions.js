@@ -1,4 +1,5 @@
 import { apiFetch } from '../utils/requests';
+import { buildApiUrl } from '../config/api';
 
 // GET /api/transactions
 // Supports filters: status, bundle_id, date_from, date_to, search, page, limit
@@ -24,7 +25,7 @@ function getFilenameFromContentDisposition(headerValue) {
 // Returns a CSV download as a Blob + suggested filename (if provided by backend).
 export async function exportTransactionsCSV(params = {}) {
   const search = new URLSearchParams(params).toString();
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transactions/export?${search}`, {
+  const res = await fetch(buildApiUrl(`/api/transactions/export?${search}`), {
     method: 'GET',
     credentials: 'include',
   });

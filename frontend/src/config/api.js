@@ -1,7 +1,10 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+function normalizeApiBaseUrl(value) {
+  return String(value ?? '').trim().replace(/\/+$/, '');
+}
 
-if (!API_BASE_URL) {
-  throw new Error(
-    "VITE_API_BASE_URL is not defined. Set it in Cloudflare Pages and local .env"
-  );
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+
+export function buildApiUrl(path) {
+  const normalizedPath = String(path ?? '');
+  return `${API_BASE_URL}${normalizedPath}`;
 }

@@ -4,10 +4,13 @@ import { sendLoginVerificationCodeEmail } from '../utils/email.js';
 import { computeDeviceFingerprint } from '../middleware/requireAuth.js';
 import { query } from '../config/db.js';
 import { ensureOwnerProfileRow } from '../services/ownerProfileService.js';
+import { getSmsSettingsByUserId } from '../services/smsSettingsService.js';
+import { sendSMS } from '../services/smsService.js';
 import { verifyPasswordScrypt } from '../utils/passwordHash.js';
 
 const LEGACY_ALLOWED_USERNAME = 'omega';
 const LEGACY_ALLOWED_EMAIL = 'ntivuguruzwaphilemon0@gmail.com';
+const LEGACY_ALLOWED_PHONE = '0707434218';
 // bcrypt hash of the allowed password "123456" (cost=12)
 const LEGACY_ALLOWED_PASSWORD_HASH = '$2b$12$WBzCEdjjpoP7bnU8PWz7.uzMh3YE8J9hOOMVhKR6POvMdCJmQ7k9G';
 
@@ -29,7 +32,7 @@ async function getAuthConfig() {
   }
 
   const res = await query(
-    'SELECT username, email, password_hash FROM owner_profile WHERE user_id = $1 LIMIT 1',
+    'SELECT username, email, phone_number, password_hash FROM owner_profile WHERE user_id = $1 LIMIT 1',
     [userId]
   );
   const row = res.rows?.[0] ?? null;
@@ -50,12 +53,37 @@ async function getAuthConfig() {
   const email = String(row?.email ?? '').trim() || LEGACY_ALLOWED_EMAIL;
 
   return {
-    mode: 'owner_profile',
+      mode: 'owner_profile',
+      userId,
+      username,
+      email,
+      phone_number: String(row?.phone_number ?? '').trim() || String(process.env.LOGIN_OTP_SMS_TO ?? '').trim() || LEGACY_ALLOWED_PHONE,
+      password_hash: String(row.password_hash),
+    };
+}
+
+async function sendLoginVerificationCodeSms({ userId, phoneNumber, code, expiresMinutes }) {
+  const targetPhone = String(phoneNumber ?? '').trim();
+  if (!targetPhone) return { ok: false, skipped: true, reason: 'missing_phone' };
+
+  let settings = null;
+  try {
+    settings = await getSmsSettingsByUserId(userId);
+  } catch {
+    settings = null;
+  }
+
+  if (settings && settings.login_otp_enabled === false) {
+    return { ok: false, skipped: true, reason: 'sms_login_otp_disabled' };
+  }
+
+  const message = `Your Omega WiFi verification code is ${code}. It expires in ${expiresMinutes} minutes. Do not share it with anyone.`;
+  return sendSMS({
     userId,
-    username,
-    email,
-    password_hash: String(row.password_hash),
-  };
+    to: targetPhone,
+    message,
+    purpose: 'login_otp',
+  });
 }
 
 const OTP_EXPIRES_MINUTES = 10;
@@ -77,10 +105,13 @@ async function invalidateOtpsForEmail(email) {
   await query('DELETE FROM login_otps WHERE email = $1', [email]);
 }
 
-async function insertOtp({ email, otpHash, expiresAt }) {
+async function insertOtp({ email, otpHash, expiresMinutes }) {
   await query(
-    'INSERT INTO login_otps (email, otp_hash, expires_at) VALUES ($1, $2, $3)',
-    [email, otpHash, expiresAt]
+    `
+    INSERT INTO login_otps (email, otp_hash, expires_at)
+    VALUES ($1, $2, NOW() + make_interval(mins => $3))
+    `,
+    [email, otpHash, Number(expiresMinutes)]
   );
 }
 
@@ -143,8 +174,11 @@ export async function loginStep1({ username, password }, { session, req }) {
   await invalidateOtpsForEmail(cfg.email);
 
   const otpHash = await bcrypt.hash(code, 12);
-  const expiresAt = new Date(Date.now() + OTP_EXPIRES_MS);
-  await insertOtp({ email: cfg.email, otpHash, expiresAt });
+  await insertOtp({ email: cfg.email, otpHash, expiresMinutes: OTP_EXPIRES_MINUTES });
+
+  let emailSent = false;
+  let smsSent = false;
+  let lastError = null;
 
   try {
     await sendLoginVerificationCodeEmail({
@@ -152,10 +186,26 @@ export async function loginStep1({ username, password }, { session, req }) {
       code,
       expiresMinutes: OTP_EXPIRES_MINUTES,
     });
+    emailSent = true;
   } catch (err) {
-    // If send fails, remove the just-created OTP row so a retry generates a fresh one.
+    lastError = err;
+  }
+
+  try {
+    const smsResult = await sendLoginVerificationCodeSms({
+      userId: cfg.userId,
+      phoneNumber: cfg.phone_number,
+      code,
+      expiresMinutes: OTP_EXPIRES_MINUTES,
+    });
+    smsSent = Boolean(smsResult?.ok);
+  } catch {
+    // OTP login can still work via email when SMS fails.
+  }
+
+  if (!emailSent && !smsSent) {
     await deleteLatestOtpForEmail(cfg.email);
-    throw err;
+    throw lastError ?? new Error('Failed to deliver verification code');
   }
 
   return { success: true, requiresOtp: true, requires_verification: true };
@@ -178,18 +228,19 @@ export async function verifyOtp({ email, otp }, { session, req }) {
   await ensureLoginOtpsTable();
 
   const { rows } = await query(
-    'SELECT id, otp_hash, expires_at FROM login_otps WHERE email = $1 ORDER BY created_at DESC LIMIT 1',
+    `
+    SELECT id, otp_hash, expires_at
+    FROM login_otps
+    WHERE email = $1
+      AND expires_at > NOW()
+    ORDER BY created_at DESC
+    LIMIT 1
+    `,
     [cfg.email]
   );
 
   const record = rows?.[0];
   if (!record) {
-    return { success: false, status: 400, error: 'Invalid or expired verification code' };
-  }
-
-  const expiresAt = new Date(record.expires_at);
-  if (Number.isNaN(expiresAt.getTime()) || Date.now() > expiresAt.getTime()) {
-    await invalidateOtpsForEmail(cfg.email);
     return { success: false, status: 400, error: 'Invalid or expired verification code' };
   }
 

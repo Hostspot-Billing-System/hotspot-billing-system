@@ -1,4 +1,6 @@
 import { apiFetch } from '../utils/requests';
+import { buildApiUrl } from '../config/api';
+import { api } from './api';
 
 
 // GET /api/vouchers (filters only)
@@ -17,7 +19,7 @@ export async function uploadVouchersCsv({ packageId, file }) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('package_id', String(packageId));
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/vouchers/upload`, {
+  const res = await fetch(buildApiUrl('/api/vouchers/upload'), {
     method: 'POST',
     body: formData,
     credentials: 'include',

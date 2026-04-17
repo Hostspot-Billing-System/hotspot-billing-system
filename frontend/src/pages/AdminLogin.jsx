@@ -1,7 +1,7 @@
 import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { alpha, useTheme } from '@mui/material/styles';
-import { login, getSession } from '../services/auth.service.js';
+import { getSession, login, resendLoginOtp, verifyLoginOtp } from '../services/auth.service.js';
 import FullPageLoader from '../components/FullPageLoader.jsx';
 import billingLogo from '../assets/billing_logo.png';
 import { useColorMode } from '../theme/colorMode.js';
@@ -270,17 +270,16 @@ export default function AdminLogin() {
     setVerifying(true);
     setError('');
     try {
-      const res = await api.post('/api/auth/verify-otp', {
-        email: 'ntivuguruzwaphilemon0@gmail.com',
+      const res = await verifyLoginOtp({
         otp: otpValue,
       });
 
-      if (res?.data?.success) {
+      if (res?.success) {
         navigateTo('/admin/dashboard');
         return;
       }
 
-      setError(res?.data?.error || 'Verification failed');
+      setError(res?.error || 'Verification failed');
     } catch (err) {
       const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Verification failed';
       setError(msg);
@@ -300,19 +299,19 @@ export default function AdminLogin() {
     setResending(true);
     setError('');
     try {
-      const res = await api.post('/api/auth/resend-otp', {
+      const res = await resendLoginOtp({
         username: username.trim(),
         password,
       });
 
-      if (res?.data?.success) {
+      if (res?.success) {
         setOtp(Array(6).fill(''));
         setOtpExpiresAt(Date.now() + 10 * 60 * 1000);
         setNowMs(Date.now());
         return;
       }
 
-      setError(res?.data?.error || 'Failed to resend code');
+      setError(res?.error || 'Failed to resend code');
     } catch (err) {
       const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Failed to resend code';
       setError(msg);

@@ -16,6 +16,7 @@ import MikroTikRouters from './pages/MikroTikRouters.jsx';
 import PortalHome from './portal/PortalHome.jsx';
 import MyProfile from './pages/MyProfile.jsx';
 import { getSession } from './services/auth.service.js';
+import { api } from './services/api.js';
 import FullPageLoader from './components/FullPageLoader.jsx';
 
 function getPath() {

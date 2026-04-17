@@ -222,7 +222,7 @@ export default function AdminBundles() {
 
     setStatusLoadingById((s) => ({ ...s, [id]: true }));
     try {
-      await patchBundleStatus(id, nextStatus);
+      await updateBundleStatus(id, nextStatus);
       setRows((prev) =>
         prev.map((r) =>
           String(r?.id) === String(id)

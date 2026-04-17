@@ -196,8 +196,11 @@ export async function getResetPassword(req, res) {
 
 export async function postResetPassword(req, res) {
   const token = String(req.body?.token ?? '').trim();
-  const new_password = String(req.body?.new_password ?? '');
-  const confirm_password = String(req.body?.confirm_password ?? req.body?.confirm_new_password ?? '');
+  const fallbackPassword = String(req.body?.password ?? '');
+  const new_password = String(req.body?.new_password ?? fallbackPassword);
+  const confirm_password = String(
+    req.body?.confirm_password ?? req.body?.confirm_new_password ?? fallbackPassword
+  );
 
   if (!token) return res.status(400).json({ success: false, error: 'Invalid or expired reset link' });
   if (new_password.length < 6) return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });

@@ -2,7 +2,7 @@ import { Alert, Box, Button, Card, CardContent, IconButton, InputAdornment, Stac
 import { alpha, useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useState } from 'react';
 import billingLogo from '../assets/billing_logo.png';
-import { resetPassword } from '../services/auth.service.js';
+import { resetPassword, validateResetPasswordToken } from '../services/auth.service.js';
 import { useColorMode } from '../theme/colorMode.js';
 
 function navigateTo(path) {
@@ -128,9 +128,9 @@ export default function ResetPassword() {
       setLoading(true);
       setError('');
       try {
-        const res = await api.get('/api/auth/reset-password', { params: { token } });
+        const res = await validateResetPasswordToken(token);
         if (cancelled) return;
-        setValid(Boolean(res?.data?.valid));
+        setValid(Boolean(res?.valid));
       } catch {
         if (cancelled) return;
         setValid(false);
@@ -146,10 +146,23 @@ export default function ResetPassword() {
 
   async function submit() {
     if (saving) return;
+    const nextPassword = String(pw.new_password ?? '');
+    const confirmPassword = String(pw.confirm_password ?? '');
+
+    if (nextPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    if (nextPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
     setSaving(true);
     setError('');
     try {
-      await resetPassword(token, String(pw.new_password ?? ''));
+      await resetPassword(token, nextPassword, confirmPassword);
       setDone(true);
     } catch (e) {
       const msg = e?.message || 'Failed to reset password';

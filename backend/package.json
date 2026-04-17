@@ -12,6 +12,7 @@
     "test:mikrotik:sessions": "node --test tests/mikrotikSessionsService.test.js",
     "test:mikrotik:disconnect": "node --test tests/mikrotikDisconnect.mock.test.js",
     "test:mikrotik:status": "node --test tests/mikrotikStatusService.test.js",
+    "db:apply:all": "node scripts/applyAllMigrations.mjs",
     "db:apply:transactions": "node scripts/applyTransactionsMigrations.js",
     "db:apply:withdrawals": "node scripts/applyWithdrawalsMigrations.js",
     "db:seed:mock-vouchers": "node scripts/seedMockVouchers.mjs",

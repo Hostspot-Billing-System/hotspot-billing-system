@@ -1,4 +1,5 @@
 import { apiFetch } from '../utils/requests';
+import { buildApiUrl } from '../config/api';
 
 function buildDefaultFilename() {
   const dateStamp = new Date().toISOString().slice(0, 10);
@@ -41,7 +42,7 @@ export function getAdminTransactions(params) {
 // EXPORT /api/transactions/export
 export async function exportTransactions(params) {
   const search = new URLSearchParams(params).toString();
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transactions/export?${search}`, {
+  const res = await fetch(buildApiUrl(`/api/transactions/export?${search}`), {
     method: 'GET',
     credentials: 'include',
   });

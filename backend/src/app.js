@@ -26,11 +26,12 @@ import authRoutes from './auth/auth.routes.js';
 import requireAuth from './middleware/requireAuth.js';
 
 const app = express();
+const isProduction = env.APP_ENV === 'production';
 
 // PRODUCTION NOTE:
 // Railway/Vercel sit behind proxies and terminate TLS. Trusting the proxy enables
 // accurate req.secure and allows `secure` cookies to be set correctly.
-if (env.APP_ENV === 'production') {
+if (isProduction) {
    app.set('trust proxy', 1);
 }
 
@@ -69,14 +70,14 @@ if (!process.env.SESSION_SECRET || String(process.env.SESSION_SECRET).trim() ===
    throw new Error('Missing required environment variable: SESSION_SECRET');
 }
 
-app.set('trust proxy', 1);
 app.use(session({
    secret: process.env.SESSION_SECRET,
    resave: false,
    saveUninitialized: false,
    cookie: {
-      secure: true,
-      sameSite: 'none'
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax'
    }
 }));
 

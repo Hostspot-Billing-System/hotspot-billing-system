@@ -1,9 +1,10 @@
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') || '';
+const baseURL = API_BASE_URL;
 if (!baseURL && import.meta.env.DEV) {
   // eslint-disable-next-line no-console
-  console.warn('VITE_API_BASE_URL is not set. API calls will fail.');
+  console.warn('VITE_API_BASE_URL is not set. Falling back to same-origin /api requests.');
 }
 
 export const api = axios.create({

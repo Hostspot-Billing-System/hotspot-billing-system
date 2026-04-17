@@ -1,7 +1,7 @@
-import { API_BASE_URL } from "../config/api";
+import { buildApiUrl } from "../config/api";
 
 export async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(buildApiUrl(path), {
     ...options,
     credentials: "include",
     headers: {
